@@ -232,7 +232,7 @@ curl -X POST "http://<host-ip>:8200/api/v1/models/download?download_path=ovms_mo
     }
   ],
   "parallel_downloads": false
-}
+}'
 ```
 
 **NOTES**
@@ -373,7 +373,7 @@ To validate changes locally before deploying:
   uv run pytest tests/unit -v
   ```
 
-Use `pytest tests/ --cov=src --cov-report=term` if you also need coverage metrics. See [docs/user-guide/running-tests.md](docs/user-guide/running-tests.md) for advanced filtering options and troubleshooting tips.
+Use `pytest tests/ --cov=src --cov-report=term` if you also need coverage metrics. See [docs/user-guide/running-tests.md](./running-tests.md) for advanced filtering options and troubleshooting tips.
 
 ## Best Practices
 
