@@ -1,103 +1,103 @@
 # Generic Camera Plugin
 
+GStreamer source plugin for GenICam-compliant cameras (Basler, Balluff, FLIR, etc.) for use with DL Streamer.
+
 1. [Overview](#overview)
-
-2. [Versioning](#versioning)
-
-2. [Build](#build)
-
-3. [Clean](#clean)
-
+2. [Build - Linux](#build---linux)
+3. [Build - Windows](#build---windows)
 4. [Usage](#usage)
-
 5. [Troubleshooting](#troubleshooting)
 
 ## Overview
 
 This is the Gstreamer source plugin for camera devices compliant to GenICam. The design is scalable to other machine vision standards. The plugin uses interface technology driver - Gig E Vision driver or USB 3 Vision driver - by the camera device vendor wrapped under GenICam standard as GenTL producer. The plugin has a library that acts as a GenTL consumer. GenTL consumer interprets the GenICam compliant camera capabilities via camera description file in XML format and configures as desired via GenAPI.
 
-## Versioning
+## Build - Linux
 
-The source code is versioned with the format of 3 numbers separated by points. The first number is major version, which in this case is 1. The second number is minor version, which increments for every release like engineering releases, alpha or PV etc., The third number is the revision number, which increments when a feature gets merged from a feature branch. It resets when the minor version number increments for a release.
-First engineering release version is v1.0.0
-Second engineering release version is v1.1.0
-Alpha release version is v1.2.0
-PV release version is v1.3.0
+Quick build:
 
-## Build and Install
-
-Following is the command to build the plugin.
-
-```
+```bash
 ./setup.sh
 ```
 
-This script does the following
+This script:
+1. Copies GenICam runtime binaries to `/usr/lib/x86_64-linux-gnu/`
+2. Runs `autogen.sh` → `configure` → `make` → `make install`
+3. Installs plugin to `/usr/local/lib/gstreamer-1.0`
+4. Sets `GST_PLUGIN_PATH=/usr/local/lib/gstreamer-1.0`
 
-1. Downloads the GenICam runtime binaries (verision 3.1) from EMVA website
-2. Unzips the binary and except Linux64 for x86_64 tar ball, deletes all other files
-3. Untars Linux64 for x86_64 tar ball and copies to standard library path in Ubuntu, i.e., /usr/lib/x86_64-linux-gnu/
-4. Runs configure command to configure the project generating Makefile
-5. Calls make to build
-6. Installs the generated gencamsrc shared library to /usr/local/lib/gstreamer-1.0
-7. Sets the environment variable GST_PLUGIN_PATH to /usr/local/lib/gstreamer-1.0
-
-If plugin is installed successsfully, should be able to inspect it.
-
-```
+Verify installation:
+```bash
 gst-inspect-1.0 gencamsrc
 ```
 
-If it returns information about the plugin, then it's installed successfully
-and can be used like any other gstreamer source.
-
-## Clean
-
-To remove the program binaries and object files from the source code directory
-
-```
-make clean
+**Environment variables:**
+```bash
+export GENICAM_GENTL64_PATH=/path/to/gentl/producer  # Required for camera detection
 ```
 
-To also remove the files project Makefile that 'configure' created
+## Build - Windows
 
-```
-make distclean
+See **[BUILD_WINDOWS.md](BUILD_WINDOWS.md)** for complete Windows build instructions.
+
+Quick summary:
+```powershell
+# Install DL Streamer (includes GStreamer)
+# Download from: https://github.com/open-edge-platform/edge-ai-libraries/releases
+
+# Build plugin
+cd src-gst-gencamsrc
+.\build-windows.ps1
+
+# Set GenTL path
+$env:GENICAM_GENTL64_PATH = "C:\Program Files\Basler\pylon 7\Runtime\x64"
 ```
 
 ## Usage
 
-A few example pipelines with this plugin below. The serial number of the Basler camera in PMCE BA lab is 22034422.
+Example pipelines:
 
-```
-gst-launch-1.0 gencamsrc serial=22034422 ! videoconvert ! ximagesink
-gst-launch-1.0 gencamsrc serial=22034422 pixel-format=bayerbggr ! bayer2rgb ! ximagesink
-```
+```bash
+# Basic test
+gst-launch-1.0 gencamsrc serial=22034422 ! videoconvert ! autovideosink
 
-## Troubleshooting
+# With Bayer format conversion
+gst-launch-1.0 gencamsrc serial=22034422 pixel-format=bayerbggr ! bayer2rgb ! autovideosink
 
-### GenICam runtime binaries error
-
-If the pipeline returns error similar below, then GenICam runtime dependency is not resolved.
-
-```
-module_open failed: libGenApi_gcc42_v3_1.so: cannot open shared object file: No such file or directory
+# With DL Streamer inference
+gst-launch-1.0 gencamsrc serial=22034422 ! gvadetect model=model.xml ! gvawatermark ! autovideosink
 ```
 
-In that case, download and copy the GenICam runtime binaries to standard path. The copied files are stored in the system after reboot.
+**Find camera serial number:**
+- Basler: Use Pylon Viewer
+- Balluff: Use mvIMPACT Acquire viewer
+- FLIR: Use SpinView
 
-1. Download this file - <https://www.emva.org/wp-content/uploads/GenICam_V3_1_0_public_data.zip>
-2. Unzip to get runtime binaries and SDK files for multiple platforms
-3. Untar GenICam_Runtime_gcc42_Linux32_i86_v3_1_0.tgz file
-4. Under bin/Linux64_x64 directory, there will be shared libraries, copy all of them to usr/lib/x86_64-linux-gnu path
+## Troubleshooting (Linux)
 
-### GenTL producer error
-
-If the pipeline returns error similar below, then GenTL producer is not found.
-
+**Plugin not found:**
+```bash
+export GST_PLUGIN_PATH=/usr/local/lib/gstreamer-1.0
+ldconfig
 ```
-No transport layers found in path
+
+**GenICam runtime error:**
+```bash
+# Download GenICam runtime from EMVA
+wget https://www.emva.org/wp-content/uploads/GenICam_V3_1_0_public_data.zip
+unzip GenICam_V3_1_0_public_data.zip
+tar -xzf GenICam_Runtime_gcc42_Linux64_x64_v3_1_0.tgz
+sudo cp bin/Linux64_x64/*.so /usr/lib/x86_64-linux-gnu/
 ```
+
+**No transport layers:**
+```bash
+export GENICAM_GENTL64_PATH=/path/to/camera/sdk/cti
+# Example for Basler: /opt/pylon/lib64
+# Example for Balluff: /opt/mvIMPACT_Acquire/lib/x86_64
+```
+
+**For Windows troubleshooting:** See [BUILD_WINDOWS.md](BUILD_WINDOWS.md)
 
 In that case, set GENICAM_GENTL64_PATH environment variable to the GenTL producer installation path. Please install the compatible GenTL producer for the camera if not already done.
 
