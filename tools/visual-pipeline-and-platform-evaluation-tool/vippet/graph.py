@@ -804,6 +804,32 @@ class Graph:
 
         return modified_graph
 
+    def inject_metadata_file_paths(self, metadata_dir: str) -> list[str]:
+        """
+        Assign output file paths to all gvametapublish nodes and configure them for file output.
+
+        Sets method=file, file-format=json-lines, and file-path on every gvametapublish
+        node found in the graph, overwriting any existing values.
+
+        Args:
+            metadata_dir: Directory where metadata files will be written.
+
+        Returns:
+            list[str]: Paths of the metadata files that were injected (one per gvametapublish node).
+        """
+        metadata_file_paths: list[str] = []
+        for node in self.nodes:
+            if node.type == "gvametapublish":
+                meta_path = os.path.join(
+                    metadata_dir,
+                    f"metadata_{node.id}.jsonl",
+                )
+                node.data["method"] = "file"
+                node.data["file-format"] = "json-lines"
+                node.data["file-path"] = meta_path
+                metadata_file_paths.append(meta_path)
+        return metadata_file_paths
+
     def unify_model_instance_ids(self) -> "Graph":
         """
         Unify model-instance-id for nodes with the same device and model.
@@ -1261,6 +1287,14 @@ class Graph:
                 return node.data["device"].upper()
 
         return "CPU"
+
+    def has_gvametapublish(self) -> bool:
+        """Check whether the graph contains any gvametapublish element.
+
+        Returns:
+            True if at least one gvametapublish node is present, False otherwise.
+        """
+        return any(node.type == "gvametapublish" for node in self.nodes)
 
     def has_decodebin3(self) -> bool:
         """Check whether the graph contains a decodebin3 element."""
