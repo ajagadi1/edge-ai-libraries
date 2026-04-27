@@ -131,7 +131,7 @@ export const Videos = () => {
                 </TableCell>
                 <TableCell>
                   <video
-                    src={`/assets/videos/input/${video.filename}`}
+                    src={`/assets/videos/input/${video.path}`}
                     controls
                     className="w-48 h-auto"
                   >
