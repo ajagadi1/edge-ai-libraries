@@ -100,7 +100,14 @@ endif()
 set(GENICAM_ROOT "${_DEFAULT_GENICAM_ROOT}"
     CACHE PATH "Root directory of the GenICam SDK")
 
-set(GENICAM_INCLUDE_DIR "${GENICAM_ROOT}/Dev/library/CPP/include")
+# Header layout differs by platform:
+#   Windows SDK : Dev/library/CPP/include/  (deep layout from SDK installer)
+#   Linux SDK   : include/                  (flat layout of bundled gcc7 SDK)
+if(WIN32)
+    set(GENICAM_INCLUDE_DIR "${GENICAM_ROOT}/Dev/library/CPP/include")
+else()
+    set(GENICAM_INCLUDE_DIR "${GENICAM_ROOT}/include")
+endif()
 
 # Library sub-directory differs by platform
 if(WIN32)
@@ -160,7 +167,7 @@ foreach(_lib ${GENICAM_LIBRARY_NAMES})
         message(FATAL_ERROR
             "GenICam library '${_lib}' not found.\n"
             "Searched: ${GENICAM_LIB_DIR}\n"
-            "Linux  : run setup.sh to copy bundled .so files to system lib dir.\n"
+            "Linux  : bundled .so files are installed automatically by 'cmake --install build'.\n"
             "Windows: install the GenICam SDK and set -DGENICAM_ROOT=<path> or "
             "ensure GENICAM_ROOT64 / GENICAM_ROOT environment variables are set."
         )
@@ -182,3 +189,16 @@ message(STATUS "GenICam libs     : ${GENICAM_LIBRARIES}")
 # ---------------------------------------------------------------------------
 add_subdirectory(plugins/genicam-core/rc_genicam_api)
 add_subdirectory(plugins)
+
+# ---------------------------------------------------------------------------
+# Install GenICam shared libraries on Linux so the runtime linker finds them.
+# cmake --install copies them to ${CMAKE_INSTALL_PREFIX}/lib (default:
+# /usr/local/lib); run ldconfig afterwards to update the shared-library cache.
+# ---------------------------------------------------------------------------
+if(NOT WIN32)
+    include(GNUInstallDirs)
+    file(GLOB GENICAM_SHARED_LIBS "${GENICAM_LIB_DIR}/lib*.so*")
+    install(FILES ${GENICAM_SHARED_LIBS}
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    )
+endif()

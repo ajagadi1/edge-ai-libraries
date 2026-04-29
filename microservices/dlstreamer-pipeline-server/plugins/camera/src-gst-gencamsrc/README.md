@@ -26,21 +26,21 @@ PV release version is v1.3.0
 
 ## Build and Install
 
-Following is the command to build the plugin.
+Build and install the plugin using CMake:
 
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+sudo cmake --install build
+sudo ldconfig
 ```
-./setup.sh
-```
 
-This script does the following
+This will:
 
-1. Downloads the GenICam runtime binaries (verision 3.1) from EMVA website
-2. Unzips the binary and except Linux64 for x86_64 tar ball, deletes all other files
-3. Untars Linux64 for x86_64 tar ball and copies to standard library path in Ubuntu, i.e., /usr/lib/x86_64-linux-gnu/
-4. Runs configure command to configure the project generating Makefile
-5. Calls make to build
-6. Installs the generated gencamsrc shared library to /usr/local/lib/gstreamer-1.0
-7. Sets the environment variable GST_PLUGIN_PATH to /usr/local/lib/gstreamer-1.0
+1. Configure the build using the bundled GenICam SDK in `plugins/genicam-core/genicam/`
+2. Compile the plugin
+3. Install `libgstgencamsrc.so` to `/usr/local/lib/gstreamer-1.0` and the GenICam `.so` files to `/usr/local/lib`
+4. Update the shared-library cache so the runtime linker finds the GenICam libraries
 
 If plugin is installed successsfully, should be able to inspect it.
 
@@ -53,10 +53,10 @@ and can be used like any other gstreamer source.
 
 ## Clean
 
-To remove the program binaries and object files from the source code directory
+To remove the build directory:
 
-```
-make clean
+```bash
+rm -rf build
 ```
 
 To also remove the files project Makefile that 'configure' created
