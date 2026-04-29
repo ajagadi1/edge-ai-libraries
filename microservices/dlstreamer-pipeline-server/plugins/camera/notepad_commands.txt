@@ -1,0 +1,90 @@
+.\build_gencamsrc.ps1 -GenicamRoot "./plugins/genicam-core/genicam_win/" -VcVersion 120 
+
+
+$vc120 = "C:\Users\intel\edge-ai-libraries-main\microservices\dlstreamer-pipeline-server\plugins\camera\src-gst-gencamsrc\plugins\genicam-core\genicam_win\Runtime\bin\Win64_x64"
+$balluff_lib = "C:\Program Files\Balluff\ImpactAcquire\lib\win\x64"
+$balluff_bin = "C:\Program Files\Balluff\ImpactAcquire\bin\x64"
+$gstRoot = "C:\Program Files\gstreamer\1.0\msvc_x86_64"
+$dls = "C:\dlstreamer_dlls"
+$env:PATH = "$vc120;$gstRoot\bin;$dls;$balluff_lib;$balluff_bin;$env:PATH"
+$env:GST_PLUGIN_PATH = $dls
+$env:GST_PLUGIN_SYSTEM_PATH_1_0 = "$gstRoot\lib\gstreamer-1.0"
+$env:GENICAM_GENTL64_PATH = "C:\Program Files\Balluff\ImpactAcquire\bin\x64"
+# Always delete stale registry before inspect/launch (GStreamer caches plugin scan results)
+Remove-Item "C:\Temp\gst-registry-clean.bin" -ErrorAction SilentlyContinue
+$env:GST_REGISTRY_1_0 = "C:\Temp\gst-registry-clean.bin"
+gst-inspect-1.0 gencamsrc
+
+##############################
+
+$vc120 = "C:\Users\intel\edge-ai-libraries-main\microservices\dlstreamer-pipeline-server\plugins\camera\src-gst-gencamsrc\plugins\genicam-core\genicam_win\Runtime\bin\Win64_x64"
+$gstRoot = "C:\Program Files\gstreamer\1.0\msvc_x86_64"
+$dls = "C:\dlstreamer_dlls"
+$env:PATH = "$vc120;$gstRoot\bin;$dls;$env:PATH"
+$env:GST_PLUGIN_PATH = $dls
+$env:GST_PLUGIN_SYSTEM_PATH_1_0 = "$gstRoot\lib\gstreamer-1.0"
+$env:GENICAM_GENTL64_PATH = "C:\Program Files\Balluff\ImpactAcquire\bin\x64"
+# Always delete stale registry before inspect/launch (GStreamer caches plugin scan results)
+Remove-Item "C:\Temp\gst-registry-clean.bin" -ErrorAction SilentlyContinue
+$env:GST_REGISTRY_1_0 = "C:\Temp\gst-registry-clean.bin"
+gst-inspect-1.0 gencamsrc
+
+###############################
+
+$vc120 = "C:\Users\intel\ashish\windows-gencamsrc\src-gst-gencamsrc\src-gst-gencamsrc\plugins\genicam-core\genicam_win\Runtime\bin\Win64_x64"
+$gstRoot = "C:\Program Files\gstreamer\1.0\msvc_x86_64"
+$dls = "C:\dlstreamer_dlls"
+$env:PATH = "$vc120;$gstRoot\bin;$dls;$env:PATH"
+$env:GST_PLUGIN_PATH = $dls
+$env:GST_PLUGIN_SYSTEM_PATH_1_0 = "$gstRoot\lib\gstreamer-1.0"
+$env:GENICAM_GENTL64_PATH = "C:\Program Files\Balluff\ImpactAcquire\bin\x64"
+# Always delete stale registry before inspect/launch (GStreamer caches plugin scan results)
+Remove-Item "C:\Temp\gst-registry-clean.bin" -ErrorAction SilentlyContinue
+$env:GST_REGISTRY_1_0 = "C:\Temp\gst-registry-clean.bin"
+gst-inspect-1.0 gencamsrc
+
+###############################
+
+
+# basler worked (using pylon sdk)
+gst-launch-1.0 gencamsrc serial=24333627 pixel-format=mono8 name=source ! videoscale ! 'video/x-raw, width=1920,height=1080' ! videoconvert ! queue ! d3d12videosink
+
+# balluff (works-> uses impact acquire sdk)
+gst-launch-1.0 gencamsrc serial=FF017289 pixel-format=rgb8 name=source ! videoscale ! 'video/x-raw, width=1920,height=1080' ! videoconvert ! queue ! d3d12videosink
+
+gst-launch-1.0 gencamsrc serial=FF017289 pixel-format=mono8 name=source ! videoscale ! 'video/x-raw, width=1920,height=1080' ! videoconvert ! queue ! d3d12videosink
+
+gst-launch-1.0 gencamsrc serial=FF017289 pixel-format=mono8 name=source ! videoscale ! 'video/x-raw, width=1920,height=1080' ! videoconvert ! queue ! jpegenc !  multifilesink location="./evam/%08d.jpg"
+
+#####################################
+
+$env:GENICAM_GENTL64_PATH = "C:\Program Files\Basler\pylon 7\Runtime\x64;C:\Program Files\Basler\pylon 7\Runtime\x64\pylonCXP\bin;C:\Program Files\Balluff\ImpactAcquire\bin\x64"
+
+$env:GENICAM_GENTL64_PATH = "C:\Program Files\Basler\pylon 7\Runtime\x64"
+
+#####################################
+
+# PRC hikcamera:
+$vc120 = "C:\Users\intel\ritesh\src-gst-gencamsrc\plugins\genicam-core\genicam_win\Runtime\bin\Win64_x64"
+$gstRoot = "C:\Program Files\gstreamer\1.0\msvc_x86_64"
+$dls = "C:\dlstreamer_dlls"
+$env:PATH = "$vc120;$gstRoot\bin;$dls;$env:PATH"
+$env:GST_PLUGIN_PATH = $dls
+$env:GST_PLUGIN_SYSTEM_PATH_1_0 = "$gstRoot\lib\gstreamer-1.0"
+$env:GENICAM_GENTL64_PATH = "C:\Program Files (x86)\Common Files\MVS\Runtime\Win64_x64"
+Remove-Item "C:\Temp\gst-registry-clean.bin" -ErrorAction SilentlyContinue
+$env:GST_REGISTRY_1_0 = "C:\Temp\gst-registry-clean.bin"
+gst-inspect-1.0 gencamsrc
+
+gst-launch-1.0 gencamsrc serial=00D06759031 pixel-format=Mono8 name=source ! videoscale ! 'video/x-raw, width=1920,height=1080' ! videoconvert ! queue ! d3d12videosink
+
+########################################
+
+build and test
+
+.\build_gencamsrc.ps1 -GenicamRoot "./plugins/genicam-core/genicam_win/" -VcVersion 120
+Copy-Item "build\bin\Release\gstgencamsrc.dll" "C:\dlstreamer_dlls\gstgencamsrc.dll" -Force
+Remove-Item "C:\Temp\gst-registry-clean.bin" -ErrorAction SilentlyContinue
+gst-inspect-1.0 gencamsrc
+
+##########################################

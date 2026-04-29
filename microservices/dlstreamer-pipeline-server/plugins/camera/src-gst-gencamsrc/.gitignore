@@ -25,3 +25,11 @@ libtool
 ltmain.sh
 missing
 stamp-h1
+
+# CMake build output (generated)
+build/
+CMakeCache.txt
+CMakeFiles/
+
+# Test recordings
+*.avi
