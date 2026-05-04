@@ -7,7 +7,7 @@ GStreamer source plugin for GenICam cameras. Cross-platform CMake build supports
 - Linux plugin: `libgstgencamsrc.so` installed to `/usr/local/lib/gstreamer-1.0/`
 - Windows plugin DLL: `C:\dlstreamer_dlls\gstgencamsrc.dll`
 - GStreamer (Windows): `C:\Program Files\gstreamer\1.0\msvc_x86_64`
-- Cameras tested: Basler (serial `24333627`, pylon SDK) and Balluff (serial `FF017289`, Impact Acquire SDK)
+- Cameras tested: Basler (pylon SDK) and Balluff (Impact Acquire SDK)
 
 ## Build
 
@@ -48,7 +48,7 @@ Copy-Item "build\bin\Release\gstgencamsrc.dll" "C:\dlstreamer_dlls\gstgencamsrc.
 ## Runtime Environment Setup — Windows (before gst-inspect / gst-launch)
 
 ```powershell
-$vc120 = "C:\Users\intel\edge-ai-libraries-main\microservices\dlstreamer-pipeline-server\plugins\camera\src-gst-gencamsrc\plugins\genicam-core\genicam_win\Runtime\bin\Win64_x64"
+$vc120 = "<path-to-src-gst-gencamsrc>\plugins\genicam-core\genicam_win\Runtime\bin\Win64_x64"
 $gstRoot = "C:\Program Files\gstreamer\1.0\msvc_x86_64"
 $dls = "C:\dlstreamer_dlls"
 $env:PATH = "$vc120;$gstRoot\bin;$dls;$env:PATH"
