@@ -107,49 +107,41 @@ if ($needFetch) {
             throw "No Win64_x64_VS120 zip files found in '$refDir'."
         }
 
-        $mergeRoot = "$GENICAM_EXTRACT_DIR\_merge"
-        New-Item -ItemType Directory -Path $mergeRoot | Out-Null
+        # Assemble destination up-front
+        if (Test-Path $BUNDLED_GENICAM) { Remove-Item -Recurse -Force $BUNDLED_GENICAM }
+        New-Item -ItemType Directory -Path "$BUNDLED_GENICAM\Dev"     | Out-Null
+        New-Item -ItemType Directory -Path "$BUNDLED_GENICAM\Runtime" | Out-Null
 
         foreach ($z in $win64Zips) {
             Write-Host "Extracting: $($z.Name)"
             $zDir = "$GENICAM_EXTRACT_DIR\_$($z.BaseName)"
             Expand-Archive -Path $z.FullName -DestinationPath $zDir -Force
 
-            # Robocopy each extracted tree into the merge root
-            $null = robocopy $zDir $mergeRoot /E /256 /NFL /NDL /NJH /NJS
-            if ($LASTEXITCODE -gt 7) { throw "robocopy failed merging $($z.Name) (exit code $LASTEXITCODE)" }
+            # Find Dev\ and Runtime\ anywhere inside this zip's extraction
+            $foundDev = Get-ChildItem $zDir -Recurse -Directory -Filter "Dev" | Select-Object -First 1
+            $foundRuntime = Get-ChildItem $zDir -Recurse -Directory -Filter "Runtime" | Select-Object -First 1
+
+            if ($foundDev) {
+                Write-Host "  Merging Dev from $($z.BaseName)..."
+                $null = robocopy $foundDev.FullName "$BUNDLED_GENICAM\Dev" /E /256 /NFL /NDL /NJH /NJS
+                if ($LASTEXITCODE -gt 7) { throw "robocopy failed merging Dev from $($z.Name)" }
+            }
+            if ($foundRuntime) {
+                Write-Host "  Merging Runtime from $($z.BaseName)..."
+                $null = robocopy $foundRuntime.FullName "$BUNDLED_GENICAM\Runtime" /E /256 /NFL /NDL /NJH /NJS
+                if ($LASTEXITCODE -gt 7) { throw "robocopy failed merging Runtime from $($z.Name)" }
+            }
         }
 
-        # Locate Dev\ and Runtime\ inside the merged tree
-        $devDir = Get-ChildItem $mergeRoot -Directory -Filter "Dev" |
-            Select-Object -First 1 -ExpandProperty FullName
-        $runtimeDir = Get-ChildItem $mergeRoot -Directory -Filter "Runtime" |
-            Select-Object -First 1 -ExpandProperty FullName
-
-        if (-Not $devDir) { throw "Dev\ not found after merging all Win64_x64_VS120 zips." }
-        if (-Not $runtimeDir) { throw "Runtime\ not found after merging all Win64_x64_VS120 zips." }
-
-        # Assemble genicam_win from extracted Dev + Runtime.
-        # Use robocopy /256 instead of Copy-Item: the destination path can exceed
-        # Windows MAX_PATH (260 chars) in deeply nested repositories.
-        if (Test-Path $BUNDLED_GENICAM) { Remove-Item -Recurse -Force $BUNDLED_GENICAM }
-        New-Item -ItemType Directory -Path $BUNDLED_GENICAM | Out-Null
-
-        $destDev     = "$BUNDLED_GENICAM\Dev"
-        $destRuntime = "$BUNDLED_GENICAM\Runtime"
-
-        # If the inner zip extracted under a named Dev\ folder use it directly,
-        # otherwise treat the extraction root as Dev contents
-        $srcDev = if ((Split-Path $devDir -Leaf) -eq "Dev") { $devDir } else { $devDir }
-        $srcRuntime = if ((Split-Path $runtimeDir -Leaf) -eq "Runtime") { $runtimeDir } else { $runtimeDir }
-
-        Write-Host "Copying Dev..."
-        $null = robocopy $srcDev $destDev /E /256 /NFL /NDL /NJH /NJS
-        if ($LASTEXITCODE -gt 7) { throw "robocopy failed copying Dev (exit code $LASTEXITCODE)" }
-
-        Write-Host "Copying Runtime..."
-        $null = robocopy $srcRuntime $destRuntime /E /256 /NFL /NDL /NJH /NJS
-        if ($LASTEXITCODE -gt 7) { throw "robocopy failed copying Runtime (exit code $LASTEXITCODE)" }
+        # Verify we got the key pieces
+        $devDir     = "$BUNDLED_GENICAM\Dev"
+        $runtimeDir = "$BUNDLED_GENICAM\Runtime"
+        if (-Not (Test-Path "$devDir\library\CPP\include")) {
+            throw "Dev\library\CPP\include not found after extraction. The Development zip may have a different layout."
+        }
+        if (-Not (Test-Path "$devDir\library\CPP\lib\Win64_x64")) {
+            throw "Dev\library\CPP\lib\Win64_x64 not found. The import .lib files may be in a different zip."
+        }
 
         # Verify version header
         $verHeader = "$BUNDLED_GENICAM\Dev\library\CPP\include\_GenICamVersion.h"
