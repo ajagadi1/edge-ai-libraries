@@ -64,27 +64,25 @@ if ($needFetch) {
         if (Test-Path $GENICAM_EXTRACT_DIR) { Remove-Item -Recurse -Force $GENICAM_EXTRACT_DIR }
         Expand-Archive -Path $GENICAM_ZIP -DestinationPath $GENICAM_EXTRACT_DIR -Force
 
-        # Probe the extracted layout:
-        #   Case A: Dev\ and Runtime\ sit directly inside the extract dir
-        #   Case B: a single top-level subdirectory wraps them
-        $devDir     = Join-Path $GENICAM_EXTRACT_DIR "Dev"
-        $runtimeDir = Join-Path $GENICAM_EXTRACT_DIR "Runtime"
+        # Probe the extracted layout recursively: find the Dev\ directory that
+        # contains library\CPP\include (the GenICam development headers).
+        $devDir = Get-ChildItem $GENICAM_EXTRACT_DIR -Recurse -Directory -Filter "Dev" |
+            Where-Object { Test-Path (Join-Path $_.FullName "library\CPP\include") } |
+            Select-Object -First 1 -ExpandProperty FullName
 
-        if (-Not (Test-Path $devDir)) {
-            # Look one level deeper
-            $topItems = Get-ChildItem $GENICAM_EXTRACT_DIR -Directory
-            if ($topItems.Count -eq 1) {
-                $subdirRoot = $topItems[0].FullName
-                $devDir     = Join-Path $subdirRoot "Dev"
-                $runtimeDir = Join-Path $subdirRoot "Runtime"
-            }
+        if (-Not $devDir) {
+            # Fallback: any Dev\ directory inside the zip
+            $devDir = Get-ChildItem $GENICAM_EXTRACT_DIR -Recurse -Directory -Filter "Dev" |
+                Select-Object -First 1 -ExpandProperty FullName
         }
 
-        if (-Not (Test-Path $devDir)) {
-            Write-Host "Extracted contents:"
-            Get-ChildItem $GENICAM_EXTRACT_DIR | ForEach-Object { Write-Host "  $_" }
-            throw "Cannot locate Dev\ inside the GenICam zip.  Unexpected layout - please inspect the extracted folder and re-run with -GenicamRoot <path>."
+        if (-Not $devDir) {
+            Write-Host "Extracted contents (top 3 levels):"
+            Get-ChildItem $GENICAM_EXTRACT_DIR -Recurse -Depth 3 | ForEach-Object { Write-Host "  $($_.FullName)" }
+            throw "Cannot locate Dev\ inside the GenICam zip. Unexpected layout - please inspect the extracted folder and re-run with -GenicamRoot <path>."
         }
+
+        $runtimeDir = Join-Path (Split-Path $devDir -Parent) "Runtime"
 
         # Assemble genicam_win from extracted Dev + Runtime
         if (Test-Path $BUNDLED_GENICAM) { Remove-Item -Recurse -Force $BUNDLED_GENICAM }
