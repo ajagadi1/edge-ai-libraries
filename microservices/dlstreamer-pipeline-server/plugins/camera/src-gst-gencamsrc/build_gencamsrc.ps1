@@ -3,14 +3,15 @@
 #
 # Prerequisites
 # -------------
-#   1. GStreamer MSVC x86_64 installer from https://gstreamer.freedesktop.org
+#   1. Visual Studio 2017 or later (Build Tools are sufficient).
+#   2. GStreamer MSVC x86_64 installer from https://gstreamer.freedesktop.org
 #      (install both runtime AND development packages)
-#   2. GenICam SDK (Windows) installed, with GENICAM_ROOT64 or GENICAM_ROOT
-#      environment variable set by the SDK installer.
-#      Override with -GenicamRoot <path> if needed.
-#   3. Visual Studio 2017 or later (Build Tools are sufficient).
-#   4. pkg-config on PATH – bundled inside the GStreamer MSVC install at
-#      <GStreamer>\bin\pkg-config.exe.
+#   3. GenICam SDK - either:
+#      a) Pass -FetchGenicamSdk to download EMVA GenICam v3.1 automatically, OR
+#      b) Have a vendor SDK installed (pylon, Impact Acquire, etc.) with
+#         GENICAM_ROOT64 / GENICAM_ROOT set by the installer, OR
+#      c) Pass -GenicamRoot <path> explicitly.
+#   4. pkg-config is bundled inside the GStreamer MSVC install; no separate install needed.
 #
 # Usage
 #   .\build_gencamsrc.ps1
@@ -55,7 +56,9 @@ if ($needFetch) {
     # EMVA GenICam Package 2018.06 contains GenApi 3.1.0 + VC120 binaries
     $GENICAM_DOWNLOAD_URL = "https://www.emva.org/wp-content/uploads/GenICam_Package_2018.06.zip"
     $GENICAM_ZIP          = "$env:TEMP\GenICam_Package_2018.06.zip"
-    # Use a short base path to avoid MAX_PATH during Expand-Archive
+    # Use a short base path to avoid MAX_PATH during Expand-Archive.
+    # Ensure C:\tmp exists (it is not created by Windows by default).
+    if (-Not (Test-Path "C:\tmp")) { New-Item -ItemType Directory -Path "C:\tmp" | Out-Null }
     $GENICAM_EXTRACT_DIR  = "C:\tmp\_gc_$PID"
 
     Write-Host ""
@@ -65,6 +68,7 @@ if ($needFetch) {
 
     try {
         # Validate any cached zip; delete and re-download if corrupt/incomplete
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
         if (Test-Path $GENICAM_ZIP) {
             try {
                 $zipStream = [System.IO.Compression.ZipFile]::OpenRead($GENICAM_ZIP)
@@ -141,7 +145,9 @@ if ($needFetch) {
 
         # GenTL_v1_5.h and PFNC.h live in the outer zip under GenTL\ and SFNC\
         # (not inside the Development inner zip). Copy them into the include tree.
-        $outerRoot = Join-Path $GENICAM_EXTRACT_DIR "GenICam_Package_2018.06"
+        # Discover the outer folder name dynamically rather than hardcoding it.
+        $outerRoot = Get-ChildItem $GENICAM_EXTRACT_DIR -Directory | Select-Object -First 1 -ExpandProperty FullName
+        if (-Not $outerRoot) { throw "Outer zip extracted to an unexpected structure (no top-level folder found)." }
         $genTLDest = "$BUNDLED_GENICAM\Dev\library\CPP\include\GenTL"
         New-Item -ItemType Directory -Path $genTLDest -Force | Out-Null
         Copy-Item "$outerRoot\GenTL\GenTL_v1_5.h" $genTLDest -Force
@@ -149,8 +155,7 @@ if ($needFetch) {
         Write-Host "  Copied GenTL_v1_5.h and PFNC.h to Dev\library\CPP\include\GenTL"
 
         # Verify we got the key pieces
-        $devDir     = "$BUNDLED_GENICAM\Dev"
-        $runtimeDir = "$BUNDLED_GENICAM\Runtime"
+        $devDir = "$BUNDLED_GENICAM\Dev"
         if (-Not (Test-Path "$devDir\library\CPP\include")) {
             Write-Host "Dev contents:"
             Get-ChildItem "$devDir" -Depth 3 | ForEach-Object { Write-Host "  $($_.FullName)" }
@@ -178,7 +183,7 @@ if ($needFetch) {
         Write-Error "GenICam SDK fetch failed: $_`n`nManual download: $GENICAM_DOWNLOAD_URL`nExtract Dev\ and Runtime\ into: $BUNDLED_GENICAM"
         exit 1
     } finally {
-        if (Test-Path $GENICAM_EXTRACT_DIR) { Remove-Item -Recurse -Force $GENICAM_EXTRACT_DIR }
+        if (Test-Path $GENICAM_EXTRACT_DIR) { Remove-Item -Recurse -Force $GENICAM_EXTRACT_DIR -ErrorAction SilentlyContinue }
     }
 
     # Override GenicamRoot so the locate block below uses the freshly fetched SDK
@@ -201,7 +206,9 @@ if (-Not $vsPath) {
 Write-Host "VS installation  : $vsPath"
 
 # ============================================================================
-# Locate GStreamer (mirrors build_gvasmartclassroom.ps1 logic)
+# Locate GStreamer
+# Priority: registry key set by official installer > GSTREAMER_1_0_ROOT_MSVC_X86_64
+# env var > conventional default path.
 # ============================================================================
 $regPath = "HKLM:\SOFTWARE\GStreamer1.0\x86_64"
 $regInstallDir = (Get-ItemProperty -Path $regPath -Name "InstallDir" -ErrorAction SilentlyContinue).InstallDir
@@ -210,6 +217,8 @@ if ($regInstallDir) {
     if (-Not $GSTREAMER_ROOT.EndsWith('\1.0\msvc_x86_64')) {
         $GSTREAMER_ROOT = "$GSTREAMER_ROOT\1.0\msvc_x86_64"
     }
+} elseif ($env:GSTREAMER_1_0_ROOT_MSVC_X86_64) {
+    $GSTREAMER_ROOT = $env:GSTREAMER_1_0_ROOT_MSVC_X86_64.TrimEnd('\')
 } else {
     $GSTREAMER_ROOT = "$env:ProgramFiles\gstreamer\1.0\msvc_x86_64"
 }
