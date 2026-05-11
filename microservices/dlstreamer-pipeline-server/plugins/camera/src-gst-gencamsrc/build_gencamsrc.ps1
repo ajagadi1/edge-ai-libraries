@@ -99,60 +99,56 @@ if ($needFetch) {
         }
 
         # Extract and merge ALL Win64_x64_VS120 zips.
-        # EMVA splits the SDK across multiple archives (Development, Runtime,
-        # CommonRuntime, FirmwareUpdateRuntime) so we must merge them all to
-        # get both the import .lib files and the runtime .dll files.
+        # Only copy the minimum needed for build and run:
+        #   Development zip  -> Dev\library\ (headers + import .lib)  skip symbols/Doc/xml
+        #   Runtime zips     -> Runtime\bin\ (DLLs)
         $win64Zips = Get-ChildItem $refDir -Filter "*Win64_x64_VS120*.zip"
         if (-Not $win64Zips) {
             throw "No Win64_x64_VS120 zip files found in '$refDir'."
         }
 
-        # Assemble destination up-front
         if (Test-Path $BUNDLED_GENICAM) { Remove-Item -Recurse -Force $BUNDLED_GENICAM }
-        New-Item -ItemType Directory -Path "$BUNDLED_GENICAM\Dev"     | Out-Null
-        New-Item -ItemType Directory -Path "$BUNDLED_GENICAM\Runtime" | Out-Null
+        New-Item -ItemType Directory -Path "$BUNDLED_GENICAM\Dev\library" -Force | Out-Null
+        New-Item -ItemType Directory -Path "$BUNDLED_GENICAM\Runtime\bin" -Force | Out-Null
 
         foreach ($z in $win64Zips) {
             Write-Host "Extracting: $($z.Name)"
             $zDir = "$GENICAM_EXTRACT_DIR\_$($z.BaseName)"
             Expand-Archive -Path $z.FullName -DestinationPath $zDir -Force
 
-            # Determine the content root: if the zip extracted into a single
-            # top-level subfolder, descend into it; otherwise use zDir itself.
-            $topItems = Get-ChildItem $zDir
-            if ($topItems.Count -eq 1 -and $topItems[0].PSIsContainer) {
-                $contentRoot = $topItems[0].FullName
-            } else {
-                $contentRoot = $zDir
-            }
-
-            Write-Host "  Content root: $contentRoot"
-            Write-Host "  Top-level items: $(($topItems | Select-Object -ExpandProperty Name) -join ', ')"
-
-            # Route to Dev or Runtime based on zip name
             if ($z.Name -match "Development") {
-                $dest = "$BUNDLED_GENICAM\Dev"
+                # Locate library\ (contains CPP\include\ and CPP\lib\)
+                $srcLib = Get-ChildItem $zDir -Recurse -Directory -Filter "library" | Select-Object -First 1
+                if ($srcLib) {
+                    Write-Host "  Copying Dev\library..."
+                    $null = robocopy $srcLib.FullName "$BUNDLED_GENICAM\Dev\library" /E /256 /NFL /NDL /NJH /NJS
+                    if ($LASTEXITCODE -gt 7) { throw "robocopy failed copying Dev\library (exit $LASTEXITCODE)" }
+                } else {
+                    throw "library\ not found inside $($z.Name)"
+                }
             } else {
-                $dest = "$BUNDLED_GENICAM\Runtime"
+                # CommonRuntime / Runtime / FirmwareUpdateRuntime: copy bin\ DLLs
+                $srcBin = Get-ChildItem $zDir -Recurse -Directory -Filter "bin" | Select-Object -First 1
+                if ($srcBin) {
+                    Write-Host "  Copying Runtime\bin from $($z.BaseName)..."
+                    $null = robocopy $srcBin.FullName "$BUNDLED_GENICAM\Runtime\bin" /E /256 /NFL /NDL /NJH /NJS
+                    if ($LASTEXITCODE -gt 7) { throw "robocopy failed copying Runtime\bin from $($z.Name) (exit $LASTEXITCODE)" }
+                }
             }
-
-            Write-Host "  -> Merging into $dest"
-            $null = robocopy $contentRoot $dest /E /256 /NFL /NDL /NJH /NJS
-            if ($LASTEXITCODE -gt 7) { throw "robocopy failed merging $($z.Name) into $dest (exit $LASTEXITCODE)" }
         }
 
         # Verify we got the key pieces
         $devDir     = "$BUNDLED_GENICAM\Dev"
         $runtimeDir = "$BUNDLED_GENICAM\Runtime"
         if (-Not (Test-Path "$devDir\library\CPP\include")) {
-            Write-Host "Dev contents after extraction:"
-            Get-ChildItem $devDir -Depth 2 | ForEach-Object { Write-Host "  $($_.FullName)" }
+            Write-Host "Dev\library contents:"
+            Get-ChildItem "$devDir\library" -Depth 2 | ForEach-Object { Write-Host "  $($_.FullName)" }
             throw "Dev\library\CPP\include not found after extraction. See contents above."
         }
         if (-Not (Test-Path "$devDir\library\CPP\lib\Win64_x64")) {
             Write-Host "Dev\library\CPP contents:"
             Get-ChildItem "$devDir\library\CPP" | ForEach-Object { Write-Host "  $($_.FullName)" }
-            throw "Dev\library\CPP\lib\Win64_x64 not found. The import .lib files may be in a different zip."
+            throw "Dev\library\CPP\lib\Win64_x64 not found."
         }
 
         # Verify version header
