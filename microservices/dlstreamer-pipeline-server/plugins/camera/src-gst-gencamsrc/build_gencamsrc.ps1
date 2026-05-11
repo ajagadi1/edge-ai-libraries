@@ -117,29 +117,16 @@ if ($needFetch) {
             $zDir = "$GENICAM_EXTRACT_DIR\_$($z.BaseName)"
 
             if ($z.Name -match "Development") {
-                # Selectively stream only library/ entries from the Development zip —
-                # skips symbols/, Doc/, xml/ (potentially thousands of unneeded files).
-                # Destination paths are ~218 chars max, well under MAX_PATH — no \\?\ prefix needed.
-                Add-Type -AssemblyName System.IO.Compression.FileSystem
-                $zip = [System.IO.Compression.ZipFile]::OpenRead($z.FullName)
-                try {
-                    $libEntries = $zip.Entries | Where-Object {
-                        $_.FullName -match '(^|/)library/' -and $_.Name -ne ""
-                    }
-                    Write-Host "  Extracting $($libEntries.Count) library entries to Dev\library..."
-                    $destBase = "$BUNDLED_GENICAM\Dev\library"
-                    foreach ($entry in $libEntries) {
-                        $relPath  = ($entry.FullName -replace '^.*?library/', '').Replace('/', '\')
-                        $destFile = "$destBase\$relPath"
-                        $destDir  = [System.IO.Path]::GetDirectoryName($destFile)
-                        if (-Not [System.IO.Directory]::Exists($destDir)) {
-                            [System.IO.Directory]::CreateDirectory($destDir) | Out-Null
-                        }
-                        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destFile, $true)
-                    }
-                } finally {
-                    $zip.Dispose()
-                }
+                # Extract full Development zip to the short temp path (no MAX_PATH risk
+                # since $zDir is under C:\tmp\_gc_).  Then robocopy the whole tree to
+                # Dev\ — skipping only symbols/ and Doc/ — so GenTL headers, xml/, etc.
+                # are all captured regardless of where they sit inside the zip.
+                Write-Host "  Extracting Development zip to temp..."
+                Expand-Archive -Path $z.FullName -DestinationPath $zDir -Force
+                Write-Host "  Copying Dev contents from $($z.BaseName)..."
+                $null = robocopy $zDir "$BUNDLED_GENICAM\Dev" /E /256 /NFL /NDL /NJH /NJS `
+                    /XD "symbols" "Doc"
+                if ($LASTEXITCODE -gt 7) { throw "robocopy failed copying Dev from $($z.Name) (exit $LASTEXITCODE)" }
             } else {
                 # Runtime, CommonRuntime, FirmwareUpdateRuntime — small zips, full extract then copy bin\
                 Expand-Archive -Path $z.FullName -DestinationPath $zDir -Force
@@ -156,14 +143,17 @@ if ($needFetch) {
         $devDir     = "$BUNDLED_GENICAM\Dev"
         $runtimeDir = "$BUNDLED_GENICAM\Runtime"
         if (-Not (Test-Path "$devDir\library\CPP\include")) {
-            Write-Host "Dev\library contents:"
-            Get-ChildItem "$devDir\library" -Depth 2 | ForEach-Object { Write-Host "  $($_.FullName)" }
+            Write-Host "Dev contents:"
+            Get-ChildItem "$devDir" -Depth 3 | ForEach-Object { Write-Host "  $($_.FullName)" }
             throw "Dev\library\CPP\include not found after extraction. See contents above."
         }
         if (-Not (Test-Path "$devDir\library\CPP\lib\Win64_x64")) {
-            Write-Host "Dev\library\CPP contents:"
-            Get-ChildItem "$devDir\library\CPP" | ForEach-Object { Write-Host "  $($_.FullName)" }
             throw "Dev\library\CPP\lib\Win64_x64 not found."
+        }
+        if (-Not (Test-Path "$devDir\library\CPP\include\GenTL\GenTL_v1_5.h")) {
+            Write-Host "Dev\library\CPP\include contents:"
+            Get-ChildItem "$devDir\library\CPP\include" -Depth 1 | ForEach-Object { Write-Host "  $($_.FullName)" }
+            throw "GenTL/GenTL_v1_5.h not found after extraction. See contents above."
         }
 
         # Verify version header
