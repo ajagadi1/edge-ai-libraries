@@ -22,11 +22,21 @@ param(
     [string]$GenicamRoot     = "",
     [string]$VcVersion       = "120",   # 120=VS2013, 141=VS2017, 142=VS2019, 143=VS2022
     [string]$BuildType       = "Release",
-    [switch]$FetchGenicamSdk              # download EMVA GenICam SDK v3.1 automatically
+    [switch]$FetchGenicamSdk,             # download EMVA GenICam SDK v3.1 automatically
+    [string]$BuildDir        = ""         # override build directory (use a short path if source tree is deep)
 )
 
 $ErrorActionPreference = "Stop"
 $SRC_DIR = $PSScriptRoot
+
+# ============================================================================
+# Warn if the source path is deep enough to risk MAX_PATH (260 chars) during
+# CMake/MSBuild — older .NET IO APIs used by MSBuild do not honour the
+# LongPathsEnabled registry key.
+# ============================================================================
+if ($SRC_DIR.Length -gt 100) {
+    Write-Warning "Source path is $($SRC_DIR.Length) characters long. CMake scratch and build paths`nmay exceed Windows MAX_PATH (260 chars) and cause MSB6003 errors.`nConsider cloning to a shorter path (e.g. C:\p\gencamsrc) or passing`n-BuildDir C:\tmp\gencam_build to redirect build output."
+}
 
 # ============================================================================
 # Fetch GenICam SDK (auto-triggered when bundled folder is absent and no
@@ -238,7 +248,11 @@ if (Test-Path $VSDEVSHELL) {
 # ============================================================================
 # CMake configure + build
 # ============================================================================
-$BUILD_DIR = "$SRC_DIR\build"
+if ($BuildDir -ne "") {
+    $BUILD_DIR = $BuildDir
+} else {
+    $BUILD_DIR = "$SRC_DIR\build"
+}
 if (Test-Path $BUILD_DIR) {
     Write-Host "Removing existing build directory..."
     Remove-Item -Recurse -Force $BUILD_DIR
