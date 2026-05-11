@@ -117,15 +117,29 @@ if ($needFetch) {
             $zDir = "$GENICAM_EXTRACT_DIR\_$($z.BaseName)"
 
             if ($z.Name -match "Development") {
-                # Extract to short temp path (avoids MAX_PATH in Expand-Archive),
-                # then robocopy /256 only the library/ subtree to the destination.
-                Write-Host "  Extracting Development zip to short temp path..."
-                Expand-Archive -Path $z.FullName -DestinationPath $zDir -Force
-                $srcLib = Get-ChildItem $zDir -Recurse -Directory -Filter "library" | Select-Object -First 1
-                if (-Not $srcLib) { throw "No 'library' folder found in Development zip at $zDir" }
-                Write-Host "  Copying Dev\library from $($z.BaseName)..."
-                $null = robocopy $srcLib.FullName "$BUNDLED_GENICAM\Dev\library" /E /256 /NFL /NDL /NJH /NJS
-                if ($LASTEXITCODE -gt 7) { throw "robocopy failed copying Dev\library (exit $LASTEXITCODE)" }
+                # Selectively stream only library/ entries from the Development zip —
+                # skips symbols/, Doc/, xml/ (potentially thousands of unneeded files).
+                # Destination paths are ~218 chars max, well under MAX_PATH — no \\?\ prefix needed.
+                Add-Type -AssemblyName System.IO.Compression.FileSystem
+                $zip = [System.IO.Compression.ZipFile]::OpenRead($z.FullName)
+                try {
+                    $libEntries = $zip.Entries | Where-Object {
+                        $_.FullName -match '(^|/)library/' -and $_.Name -ne ""
+                    }
+                    Write-Host "  Extracting $($libEntries.Count) library entries to Dev\library..."
+                    $destBase = "$BUNDLED_GENICAM\Dev\library"
+                    foreach ($entry in $libEntries) {
+                        $relPath  = ($entry.FullName -replace '^.*?library/', '').Replace('/', '\')
+                        $destFile = "$destBase\$relPath"
+                        $destDir  = [System.IO.Path]::GetDirectoryName($destFile)
+                        if (-Not [System.IO.Directory]::Exists($destDir)) {
+                            [System.IO.Directory]::CreateDirectory($destDir) | Out-Null
+                        }
+                        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destFile, $true)
+                    }
+                } finally {
+                    $zip.Dispose()
+                }
             } else {
                 # Runtime, CommonRuntime, FirmwareUpdateRuntime — small zips, full extract then copy bin\
                 Expand-Archive -Path $z.FullName -DestinationPath $zDir -Force
