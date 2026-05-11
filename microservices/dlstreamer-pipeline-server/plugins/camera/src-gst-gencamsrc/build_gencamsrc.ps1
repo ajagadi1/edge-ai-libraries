@@ -98,32 +98,36 @@ if ($needFetch) {
             throw "Cannot locate 'Reference Implementation' folder inside the GenICam zip. Unexpected layout - please re-run with -GenicamRoot <path>."
         }
 
-        $devZip     = Get-ChildItem $refDir -Filter "*Win64_x64_VS120*Development*.zip"  | Select-Object -First 1
-        $runtimeZip = Get-ChildItem $refDir -Filter "*Win64_x64_VS120*Release-Runtime*.zip" | Select-Object -First 1
-
-        if (-Not $devZip) {
-            throw "Cannot find Win64_x64_VS120 Development zip in '$refDir'. Available files: $(Get-ChildItem $refDir -Filter '*.zip' | Select-Object -ExpandProperty Name)"
+        # Extract and merge ALL Win64_x64_VS120 zips.
+        # EMVA splits the SDK across multiple archives (Development, Runtime,
+        # CommonRuntime, FirmwareUpdateRuntime) so we must merge them all to
+        # get both the import .lib files and the runtime .dll files.
+        $win64Zips = Get-ChildItem $refDir -Filter "*Win64_x64_VS120*.zip"
+        if (-Not $win64Zips) {
+            throw "No Win64_x64_VS120 zip files found in '$refDir'."
         }
-        if (-Not $runtimeZip) {
-            throw "Cannot find Win64_x64_VS120 Runtime zip in '$refDir'. Available files: $(Get-ChildItem $refDir -Filter '*.zip' | Select-Object -ExpandProperty Name)"
+
+        $mergeRoot = "$GENICAM_EXTRACT_DIR\_merge"
+        New-Item -ItemType Directory -Path $mergeRoot | Out-Null
+
+        foreach ($z in $win64Zips) {
+            Write-Host "Extracting: $($z.Name)"
+            $zDir = "$GENICAM_EXTRACT_DIR\_$($z.BaseName)"
+            Expand-Archive -Path $z.FullName -DestinationPath $zDir -Force
+
+            # Robocopy each extracted tree into the merge root
+            $null = robocopy $zDir $mergeRoot /E /256 /NFL /NDL /NJH /NJS
+            if ($LASTEXITCODE -gt 7) { throw "robocopy failed merging $($z.Name) (exit code $LASTEXITCODE)" }
         }
 
-        Write-Host "Extracting Development SDK: $($devZip.Name)"
-        $devExtract = "$GENICAM_EXTRACT_DIR\_dev"
-        Expand-Archive -Path $devZip.FullName -DestinationPath $devExtract -Force
-
-        Write-Host "Extracting Runtime SDK: $($runtimeZip.Name)"
-        $runtimeExtract = "$GENICAM_EXTRACT_DIR\_runtime"
-        Expand-Archive -Path $runtimeZip.FullName -DestinationPath $runtimeExtract -Force
-
-        # Locate Dev\ and Runtime\ inside their respective extractions
-        $devDir = Get-ChildItem $devExtract -Recurse -Directory -Filter "Dev" |
+        # Locate Dev\ and Runtime\ inside the merged tree
+        $devDir = Get-ChildItem $mergeRoot -Directory -Filter "Dev" |
             Select-Object -First 1 -ExpandProperty FullName
-        if (-Not $devDir) { $devDir = $devExtract }  # may extract directly as Dev contents
-
-        $runtimeDir = Get-ChildItem $runtimeExtract -Recurse -Directory -Filter "Runtime" |
+        $runtimeDir = Get-ChildItem $mergeRoot -Directory -Filter "Runtime" |
             Select-Object -First 1 -ExpandProperty FullName
-        if (-Not $runtimeDir) { $runtimeDir = $runtimeExtract }
+
+        if (-Not $devDir) { throw "Dev\ not found after merging all Win64_x64_VS120 zips." }
+        if (-Not $runtimeDir) { throw "Runtime\ not found after merging all Win64_x64_VS120 zips." }
 
         # Assemble genicam_win from extracted Dev + Runtime.
         # Use robocopy /256 instead of Copy-Item: the destination path can exceed
