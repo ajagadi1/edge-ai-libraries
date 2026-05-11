@@ -117,29 +117,41 @@ if ($needFetch) {
             $zDir = "$GENICAM_EXTRACT_DIR\_$($z.BaseName)"
             Expand-Archive -Path $z.FullName -DestinationPath $zDir -Force
 
-            # Find Dev\ and Runtime\ anywhere inside this zip's extraction
-            $foundDev = Get-ChildItem $zDir -Recurse -Directory -Filter "Dev" | Select-Object -First 1
-            $foundRuntime = Get-ChildItem $zDir -Recurse -Directory -Filter "Runtime" | Select-Object -First 1
+            # Determine the content root: if the zip extracted into a single
+            # top-level subfolder, descend into it; otherwise use zDir itself.
+            $topItems = Get-ChildItem $zDir
+            if ($topItems.Count -eq 1 -and $topItems[0].PSIsContainer) {
+                $contentRoot = $topItems[0].FullName
+            } else {
+                $contentRoot = $zDir
+            }
 
-            if ($foundDev) {
-                Write-Host "  Merging Dev from $($z.BaseName)..."
-                $null = robocopy $foundDev.FullName "$BUNDLED_GENICAM\Dev" /E /256 /NFL /NDL /NJH /NJS
-                if ($LASTEXITCODE -gt 7) { throw "robocopy failed merging Dev from $($z.Name)" }
+            Write-Host "  Content root: $contentRoot"
+            Write-Host "  Top-level items: $(($topItems | Select-Object -ExpandProperty Name) -join ', ')"
+
+            # Route to Dev or Runtime based on zip name
+            if ($z.Name -match "Development") {
+                $dest = "$BUNDLED_GENICAM\Dev"
+            } else {
+                $dest = "$BUNDLED_GENICAM\Runtime"
             }
-            if ($foundRuntime) {
-                Write-Host "  Merging Runtime from $($z.BaseName)..."
-                $null = robocopy $foundRuntime.FullName "$BUNDLED_GENICAM\Runtime" /E /256 /NFL /NDL /NJH /NJS
-                if ($LASTEXITCODE -gt 7) { throw "robocopy failed merging Runtime from $($z.Name)" }
-            }
+
+            Write-Host "  -> Merging into $dest"
+            $null = robocopy $contentRoot $dest /E /256 /NFL /NDL /NJH /NJS
+            if ($LASTEXITCODE -gt 7) { throw "robocopy failed merging $($z.Name) into $dest (exit $LASTEXITCODE)" }
         }
 
         # Verify we got the key pieces
         $devDir     = "$BUNDLED_GENICAM\Dev"
         $runtimeDir = "$BUNDLED_GENICAM\Runtime"
         if (-Not (Test-Path "$devDir\library\CPP\include")) {
-            throw "Dev\library\CPP\include not found after extraction. The Development zip may have a different layout."
+            Write-Host "Dev contents after extraction:"
+            Get-ChildItem $devDir -Depth 2 | ForEach-Object { Write-Host "  $($_.FullName)" }
+            throw "Dev\library\CPP\include not found after extraction. See contents above."
         }
         if (-Not (Test-Path "$devDir\library\CPP\lib\Win64_x64")) {
+            Write-Host "Dev\library\CPP contents:"
+            Get-ChildItem "$devDir\library\CPP" | ForEach-Object { Write-Host "  $($_.FullName)" }
             throw "Dev\library\CPP\lib\Win64_x64 not found. The import .lib files may be in a different zip."
         }
 
