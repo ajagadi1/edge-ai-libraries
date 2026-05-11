@@ -30,11 +30,13 @@ sudo ldconfig
 
 ```powershell
 cd src-gst-gencamsrc
-.\build_gencamsrc.ps1 -GenicamRoot "./plugins/genicam-core/genicam_win/" -VcVersion 120
+.\build_gencamsrc.ps1                   # auto-downloads GenICam SDK on first run
+.\build_gencamsrc.ps1 -FetchGenicamSdk  # force re-download
 Copy-Item "build\bin\Release\gstgencamsrc.dll" "C:\dlstreamer_dlls\gstgencamsrc.dll" -Force
 ```
 
-- GenICam SDK bundled at `plugins\genicam-core\genicam_win\` — all VC120 (VS2013) binaries
+- GenICam SDK auto-downloaded to `plugins\genicam-core\genicam_win\` on first build (EMVA GenAPI v3.1, VC120/VS2013); folder is git-ignored
+- `-GenicamRoot` / `GENICAM_ROOT64` env var still accepted to point at a system-installed SDK instead
 
 ## GenICam SDK Layout
 

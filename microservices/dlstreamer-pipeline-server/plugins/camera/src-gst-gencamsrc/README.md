@@ -69,8 +69,18 @@ If it returns information about the plugin it is installed successfully and can 
 From the repository root, run in PowerShell:
 
 ```powershell
-.\build_gencamsrc.ps1 -GenicamRoot "./plugins/genicam-core/genicam_win/" -VcVersion 120
+.\build_gencamsrc.ps1
 ```
+
+The script will automatically download the EMVA GenICam SDK v3.1 (VC120 binaries) on first run and place it under `plugins\genicam-core\genicam_win\`. Subsequent runs reuse the folder without re-downloading.
+
+To force a fresh download (e.g. after deleting the folder):
+
+```powershell
+.\build_gencamsrc.ps1 -FetchGenicamSdk
+```
+
+If you already have the GenICam SDK installed system-wide (via Basler pylon, Balluff Impact Acquire, etc.), the script will pick it up automatically from the `GENICAM_ROOT64` / `GENICAM_ROOT` environment variable set by the vendor installer — no flags needed.
 
 The built DLL will be at `build\bin\Release\gstgencamsrc.dll`.
 

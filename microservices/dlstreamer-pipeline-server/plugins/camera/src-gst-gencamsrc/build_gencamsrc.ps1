@@ -83,7 +83,7 @@ if ($needFetch) {
         if (-Not (Test-Path $devDir)) {
             Write-Host "Extracted contents:"
             Get-ChildItem $GENICAM_EXTRACT_DIR | ForEach-Object { Write-Host "  $_" }
-            throw "Cannot locate Dev\ inside the GenICam zip.  Unexpected layout — please inspect and set -GenicamRoot manually."
+            throw "Cannot locate Dev\ inside the GenICam zip.  Unexpected layout - please inspect the extracted folder and re-run with -GenicamRoot <path>."
         }
 
         # Assemble genicam_win from extracted Dev + Runtime
@@ -99,7 +99,7 @@ if ($needFetch) {
             Write-Host "GenICam version info:"
             $verText -split "`n" | Where-Object { $_ -match 'VERSION|COMPILER|REVISION' } | ForEach-Object { Write-Host "  $_" }
         } else {
-            Write-Warning "_GenICamVersion.h not found — zip structure may differ from expected."
+            Write-Warning "_GenICamVersion.h not found - zip structure may differ from expected."
         }
 
         Write-Host "GenICam SDK extracted to: $BUNDLED_GENICAM"
