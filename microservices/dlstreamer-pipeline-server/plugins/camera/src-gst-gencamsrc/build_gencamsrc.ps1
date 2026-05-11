@@ -85,10 +85,6 @@ if ($needFetch) {
         if (Test-Path $GENICAM_EXTRACT_DIR) { Remove-Item -Recurse -Force $GENICAM_EXTRACT_DIR }
         Expand-Archive -Path $GENICAM_ZIP -DestinationPath $GENICAM_EXTRACT_DIR -Force
 
-        # Show top-level structure of the outer zip so layout is visible
-        Write-Host "Outer zip top-level structure:"
-        Get-ChildItem $GENICAM_EXTRACT_DIR -Recurse -Depth 2 | ForEach-Object { Write-Host "  $($_.FullName)" }
-
         # The GenICam_Package_2018.06.zip is a package-of-packages.
         # The actual Win64 VC120 SDK lives in inner zip files under
         # "Reference Implementation\":
@@ -143,6 +139,15 @@ if ($needFetch) {
             }
         }
 
+        # GenTL_v1_5.h and PFNC.h live in the outer zip under GenTL\ and SFNC\
+        # (not inside the Development inner zip). Copy them into the include tree.
+        $outerRoot = Join-Path $GENICAM_EXTRACT_DIR "GenICam_Package_2018.06"
+        $genTLDest = "$BUNDLED_GENICAM\Dev\library\CPP\include\GenTL"
+        New-Item -ItemType Directory -Path $genTLDest -Force | Out-Null
+        Copy-Item "$outerRoot\GenTL\GenTL_v1_5.h" $genTLDest -Force
+        Copy-Item "$outerRoot\SFNC\PFNC.h"        $genTLDest -Force
+        Write-Host "  Copied GenTL_v1_5.h and PFNC.h to Dev\library\CPP\include\GenTL"
+
         # Verify we got the key pieces
         $devDir     = "$BUNDLED_GENICAM\Dev"
         $runtimeDir = "$BUNDLED_GENICAM\Runtime"
@@ -155,9 +160,7 @@ if ($needFetch) {
             throw "Dev\library\CPP\lib\Win64_x64 not found."
         }
         if (-Not (Test-Path "$devDir\library\CPP\include\GenTL\GenTL_v1_5.h")) {
-            Write-Host "Dev\library\CPP\include contents:"
-            Get-ChildItem "$devDir\library\CPP\include" -Depth 1 | ForEach-Object { Write-Host "  $($_.FullName)" }
-            throw "GenTL/GenTL_v1_5.h not found after extraction. See contents above."
+            throw "GenTL\GenTL_v1_5.h not found — unexpected zip layout."
         }
 
         # Verify version header
