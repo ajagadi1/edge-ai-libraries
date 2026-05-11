@@ -115,25 +115,27 @@ if ($needFetch) {
             Select-Object -First 1 -ExpandProperty FullName
         if (-Not $runtimeDir) { $runtimeDir = $runtimeExtract }
 
-        # Assemble genicam_win from extracted Dev + Runtime
+        # Assemble genicam_win from extracted Dev + Runtime.
+        # Use robocopy /256 instead of Copy-Item: the destination path can exceed
+        # Windows MAX_PATH (260 chars) in deeply nested repositories.
         if (Test-Path $BUNDLED_GENICAM) { Remove-Item -Recurse -Force $BUNDLED_GENICAM }
         New-Item -ItemType Directory -Path $BUNDLED_GENICAM | Out-Null
 
-        # If Dev\ was found as a named folder, copy it as-is; otherwise treat root as Dev contents
         $destDev     = "$BUNDLED_GENICAM\Dev"
         $destRuntime = "$BUNDLED_GENICAM\Runtime"
-        if ((Split-Path $devDir -Leaf) -eq "Dev") {
-            Copy-Item $devDir -Destination $destDev -Recurse -Force
-        } else {
-            New-Item -ItemType Directory -Path $destDev | Out-Null
-            Copy-Item "$devDir\*" -Destination $destDev -Recurse -Force
-        }
-        if ((Split-Path $runtimeDir -Leaf) -eq "Runtime") {
-            Copy-Item $runtimeDir -Destination $destRuntime -Recurse -Force
-        } else {
-            New-Item -ItemType Directory -Path $destRuntime | Out-Null
-            Copy-Item "$runtimeDir\*" -Destination $destRuntime -Recurse -Force
-        }
+
+        # If the inner zip extracted under a named Dev\ folder use it directly,
+        # otherwise treat the extraction root as Dev contents
+        $srcDev = if ((Split-Path $devDir -Leaf) -eq "Dev") { $devDir } else { $devDir }
+        $srcRuntime = if ((Split-Path $runtimeDir -Leaf) -eq "Runtime") { $runtimeDir } else { $runtimeDir }
+
+        Write-Host "Copying Dev..."
+        $null = robocopy $srcDev $destDev /E /256 /NFL /NDL /NJH /NJS
+        if ($LASTEXITCODE -gt 7) { throw "robocopy failed copying Dev (exit code $LASTEXITCODE)" }
+
+        Write-Host "Copying Runtime..."
+        $null = robocopy $srcRuntime $destRuntime /E /256 /NFL /NDL /NJH /NJS
+        if ($LASTEXITCODE -gt 7) { throw "robocopy failed copying Runtime (exit code $LASTEXITCODE)" }
 
         # Verify version header
         $verHeader = "$BUNDLED_GENICAM\Dev\library\CPP\include\_GenICamVersion.h"
