@@ -31,7 +31,7 @@ $SRC_DIR = $PSScriptRoot
 
 # ============================================================================
 # Warn if the source path is deep enough to risk MAX_PATH (260 chars) during
-# CMake/MSBuild — older .NET IO APIs used by MSBuild do not honour the
+# CMake/MSBuild - older .NET IO APIs used by MSBuild do not honour the
 # LongPathsEnabled registry key.
 # ============================================================================
 if ($SRC_DIR.Length -gt 100) {
@@ -119,7 +119,7 @@ if ($needFetch) {
             if ($z.Name -match "Development") {
                 # Extract full Development zip to the short temp path (no MAX_PATH risk
                 # since $zDir is under C:\tmp\_gc_).  Then robocopy the whole tree to
-                # Dev\ — skipping only symbols/ and Doc/ — so GenTL headers, xml/, etc.
+                # Dev\ - skipping only symbols/ and Doc/ - so GenTL headers, xml/, etc.
                 # are all captured regardless of where they sit inside the zip.
                 Write-Host "  Extracting Development zip to temp..."
                 Expand-Archive -Path $z.FullName -DestinationPath $zDir -Force
@@ -128,7 +128,7 @@ if ($needFetch) {
                     /XD "symbols" "Doc"
                 if ($LASTEXITCODE -gt 7) { throw "robocopy failed copying Dev from $($z.Name) (exit $LASTEXITCODE)" }
             } else {
-                # Runtime, CommonRuntime, FirmwareUpdateRuntime — small zips, full extract then copy bin\
+                # Runtime, CommonRuntime, FirmwareUpdateRuntime - small zips, full extract then copy bin\
                 Expand-Archive -Path $z.FullName -DestinationPath $zDir -Force
                 $srcBin = Get-ChildItem $zDir -Recurse -Directory -Filter "bin" | Select-Object -First 1
                 if ($srcBin) {
@@ -160,7 +160,7 @@ if ($needFetch) {
             throw "Dev\library\CPP\lib\Win64_x64 not found."
         }
         if (-Not (Test-Path "$devDir\library\CPP\include\GenTL\GenTL_v1_5.h")) {
-            throw "GenTL\GenTL_v1_5.h not found — unexpected zip layout."
+            throw "GenTL\GenTL_v1_5.h not found - unexpected zip layout."
         }
 
         # Verify version header
