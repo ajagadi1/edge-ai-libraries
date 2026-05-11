@@ -85,6 +85,10 @@ if ($needFetch) {
         if (Test-Path $GENICAM_EXTRACT_DIR) { Remove-Item -Recurse -Force $GENICAM_EXTRACT_DIR }
         Expand-Archive -Path $GENICAM_ZIP -DestinationPath $GENICAM_EXTRACT_DIR -Force
 
+        # Show top-level structure of the outer zip so layout is visible
+        Write-Host "Outer zip top-level structure:"
+        Get-ChildItem $GENICAM_EXTRACT_DIR -Recurse -Depth 2 | ForEach-Object { Write-Host "  $($_.FullName)" }
+
         # The GenICam_Package_2018.06.zip is a package-of-packages.
         # The actual Win64 VC120 SDK lives in inner zip files under
         # "Reference Implementation\":
