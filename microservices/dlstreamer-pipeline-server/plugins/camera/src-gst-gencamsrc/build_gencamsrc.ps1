@@ -116,18 +116,21 @@ if ($needFetch) {
             $zDir = "$GENICAM_EXTRACT_DIR\_$($z.BaseName)"
 
             if ($z.Name -match "Development") {
-                # Selectively extract only library/ entries — skip symbols/, Doc/, xml/
-                # which together contain thousands of files we never need.
+                # Selectively extract only library/ entries directly to the
+                # destination using \\?\ long-path prefix — eliminates temp
+                # dir and robocopy, bypasses MAX_PATH entirely.
                 Add-Type -AssemblyName System.IO.Compression.FileSystem
                 $zip = [System.IO.Compression.ZipFile]::OpenRead($z.FullName)
                 try {
                     $libEntries = $zip.Entries | Where-Object {
                         $_.FullName -match '(^|/)library/' -and $_.Name -ne ""
                     }
-                    Write-Host "  Extracting $($libEntries.Count) library entries (skipping symbols/docs)..."
+                    Write-Host "  Extracting $($libEntries.Count) library entries directly to Dev\library..."
+                    $destBase = "\\\\?\\" + "$BUNDLED_GENICAM\Dev\library"
                     foreach ($entry in $libEntries) {
-                        $relPath = $entry.FullName -replace '^.*?library/', 'library/'
-                        $destFile = [System.IO.Path]::Combine($zDir, $relPath)
+                        # Strip everything up to and including the first 'library/' segment
+                        $relPath  = ($entry.FullName -replace '^.*?library/', '').Replace('/', '\')
+                        $destFile = "$destBase\$relPath"
                         $destDir  = [System.IO.Path]::GetDirectoryName($destFile)
                         if (-Not [System.IO.Directory]::Exists($destDir)) {
                             [System.IO.Directory]::CreateDirectory($destDir) | Out-Null
@@ -136,15 +139,6 @@ if ($needFetch) {
                     }
                 } finally {
                     $zip.Dispose()
-                }
-
-                $srcLib = Get-ChildItem $zDir -Recurse -Directory -Filter "library" | Select-Object -First 1
-                if ($srcLib) {
-                    Write-Host "  Copying Dev\library..."
-                    $null = robocopy $srcLib.FullName "$BUNDLED_GENICAM\Dev\library" /E /256 /NFL /NDL /NJH /NJS
-                    if ($LASTEXITCODE -gt 7) { throw "robocopy failed copying Dev\library (exit $LASTEXITCODE)" }
-                } else {
-                    throw "library\ not found inside $($z.Name)"
                 }
             } else {
                 # Runtime, CommonRuntime, FirmwareUpdateRuntime — small zips, full extract then copy bin\
