@@ -55,7 +55,8 @@ if ($needFetch) {
     # EMVA GenICam Package 2018.06 contains GenApi 3.1.0 + VC120 binaries
     $GENICAM_DOWNLOAD_URL = "https://www.emva.org/wp-content/uploads/GenICam_Package_2018.06.zip"
     $GENICAM_ZIP          = "$env:TEMP\GenICam_Package_2018.06.zip"
-    $GENICAM_EXTRACT_DIR  = "$env:TEMP\genicam_extract_$PID"
+    # Use a short base path to avoid MAX_PATH during Expand-Archive
+    $GENICAM_EXTRACT_DIR  = "C:\tmp\_gc_$PID"
 
     Write-Host ""
     Write-Host "========== Fetching GenICam SDK =========="
@@ -116,30 +117,15 @@ if ($needFetch) {
             $zDir = "$GENICAM_EXTRACT_DIR\_$($z.BaseName)"
 
             if ($z.Name -match "Development") {
-                # Selectively extract only library/ entries directly to the
-                # destination using \\?\ long-path prefix — eliminates temp
-                # dir and robocopy, bypasses MAX_PATH entirely.
-                Add-Type -AssemblyName System.IO.Compression.FileSystem
-                $zip = [System.IO.Compression.ZipFile]::OpenRead($z.FullName)
-                try {
-                    $libEntries = $zip.Entries | Where-Object {
-                        $_.FullName -match '(^|/)library/' -and $_.Name -ne ""
-                    }
-                    Write-Host "  Extracting $($libEntries.Count) library entries directly to Dev\library..."
-                    $destBase = "\\\\?\\" + "$BUNDLED_GENICAM\Dev\library"
-                    foreach ($entry in $libEntries) {
-                        # Strip everything up to and including the first 'library/' segment
-                        $relPath  = ($entry.FullName -replace '^.*?library/', '').Replace('/', '\')
-                        $destFile = "$destBase\$relPath"
-                        $destDir  = [System.IO.Path]::GetDirectoryName($destFile)
-                        if (-Not [System.IO.Directory]::Exists($destDir)) {
-                            [System.IO.Directory]::CreateDirectory($destDir) | Out-Null
-                        }
-                        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destFile, $true)
-                    }
-                } finally {
-                    $zip.Dispose()
-                }
+                # Extract to short temp path (avoids MAX_PATH in Expand-Archive),
+                # then robocopy /256 only the library/ subtree to the destination.
+                Write-Host "  Extracting Development zip to short temp path..."
+                Expand-Archive -Path $z.FullName -DestinationPath $zDir -Force
+                $srcLib = Get-ChildItem $zDir -Recurse -Directory -Filter "library" | Select-Object -First 1
+                if (-Not $srcLib) { throw "No 'library' folder found in Development zip at $zDir" }
+                Write-Host "  Copying Dev\library from $($z.BaseName)..."
+                $null = robocopy $srcLib.FullName "$BUNDLED_GENICAM\Dev\library" /E /256 /NFL /NDL /NJH /NJS
+                if ($LASTEXITCODE -gt 7) { throw "robocopy failed copying Dev\library (exit $LASTEXITCODE)" }
             } else {
                 # Runtime, CommonRuntime, FirmwareUpdateRuntime — small zips, full extract then copy bin\
                 Expand-Archive -Path $z.FullName -DestinationPath $zDir -Force
