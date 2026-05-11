@@ -59,20 +59,47 @@ If it returns information about the plugin it is installed successfully and can 
 1. **Visual Studio Build Tools** — install from [visualstudio.microsoft.com](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2026). Select individual components: *MSVC x64/x86 build tools (latest)* and *Windows SDK*.
 2. **CMake** — [cmake.org/download](https://cmake.org/download/)
 3. **Git** — [git-scm.com](https://git-scm.com/)
-4. **PowerShell** ≥ 7 — [github.com/PowerShell/PowerShell/releases](https://github.com/PowerShell/PowerShell/releases)
+4. **PowerShell** >= 7 — [github.com/PowerShell/PowerShell/releases](https://github.com/PowerShell/PowerShell/releases)
 5. **GStreamer MSVC x86_64** — install both the *runtime* and *development* packages from [gstreamer.freedesktop.org](https://gstreamer.freedesktop.org/download/)
 6. **DLStreamer runtime environment** — follow the [DLStreamer Windows Install Guide](https://github.com/open-edge-platform/dlstreamer/blob/main/docs/user-guide/get_started/install/install_guide_windows.md): download the DLL archive from [edge-ai-libraries releases](https://github.com/open-edge-platform/edge-ai-libraries/releases), extract to `C:\dlstreamer_dlls\`, then run `setup_dls_env.ps1` as Administrator from that folder. This installs GStreamer and creates the `C:\dlstreamer_dlls\` plugin directory.
 7. **Camera vendor GenTL producer** — install the SDK for your camera (e.g. Basler pylon, Balluff Impact Acquire, or HikRobot MVS). The installer registers the GenTL producer path.
 
+The GenICam SDK is **not** a prerequisite — the build script downloads it automatically.
+
+#### Source path length
+
+The GenICam SDK zip contains paths that exceed 260 characters when the source root is deep. **Clone or copy the repository to a short path before building.**
+
+If your clone lives at a long path (common when it is nested inside a larger repo), use this workflow each time you want to build:
+
+```powershell
+# 1. Pull latest changes in the original (long-path) clone
+cd "C:\path\to\...\src-gst-gencamsrc"
+git pull
+
+# 2. Refresh the short-path working copy
+Remove-Item -Recurse -Force C:\p\gencamsrc -ErrorAction SilentlyContinue
+xcopy /E /I /Q . "C:\p\gencamsrc"
+
+# 3. Clean any leftover extraction temp files from previous runs
+Remove-Item -Recurse -Force C:\tmp\_gc_* -ErrorAction SilentlyContinue
+
+# 4. Build from the short path
+cd C:\p\gencamsrc
+.\build_gencamsrc.ps1 -FetchGenicamSdk
+```
+
+If you clone directly to a short path (e.g. `git clone <url> C:\p\gencamsrc`), steps 1-3 are unnecessary - just `git pull` and run the script.
+
 #### Build
 
-From the repository root, run in PowerShell:
+From the source directory, run in PowerShell:
 
 ```powershell
 .\build_gencamsrc.ps1
 ```
 
-The script will automatically download the EMVA GenICam SDK v3.1 (VC120 binaries) on first run and place it under `plugins\genicam-core\genicam_win\`. Subsequent runs reuse the folder without re-downloading.
+On first run the script downloads the EMVA GenICam SDK v3.1 (VC120 binaries) automatically and places it under `plugins\genicam-core\genicam_win\`. Subsequent runs reuse the cached folder without re-downloading.
 
 To force a fresh download (e.g. after deleting the folder):
 
@@ -80,7 +107,9 @@ To force a fresh download (e.g. after deleting the folder):
 .\build_gencamsrc.ps1 -FetchGenicamSdk
 ```
 
-If you already have the GenICam SDK installed system-wide (via Basler pylon, Balluff Impact Acquire, etc.), the script will pick it up automatically from the `GENICAM_ROOT64` / `GENICAM_ROOT` environment variable set by the vendor installer — no flags needed.
+If you already have the GenICam SDK installed system-wide (via Basler pylon, Balluff Impact Acquire, etc.), the script picks it up automatically from the `GENICAM_ROOT64` / `GENICAM_ROOT` environment variable set by the vendor installer — no extra flags needed.
+
+The GStreamer installation is located automatically via the Windows registry, the `GSTREAMER_1_0_ROOT_MSVC_X86_64` environment variable (set by the official installer), or the default path `C:\Program Files\gstreamer\1.0\msvc_x86_64`.
 
 The built DLL will be at `build\bin\Release\gstgencamsrc.dll`.
 
@@ -100,11 +129,11 @@ gst-inspect-1.0 gencamsrc
 
 ### Windows Runtime Setup
 
-Before running `gst-inspect-1.0` or `gst-launch-1.0` on Windows, set the following environment variables in PowerShell. Adjust paths to match your actual installation locations.
+Before running `gst-inspect-1.0` or `gst-launch-1.0` on Windows, set the following environment variables in PowerShell. Adjust paths to match your actual installation.
 
 ```powershell
-# GenICam runtime DLLs bundled with the plugin (Win64/VC120)
-$genicamRuntime = "<path-to-src-gst-gencamsrc>\plugins\genicam-core\genicam_win\Runtime\bin\Win64_x64"
+# GenICam runtime DLLs (downloaded by build script into the source tree)
+$genicamRuntime = "C:\p\gencamsrc\plugins\genicam-core\genicam_win\Runtime\bin\Win64_x64"
 
 # GStreamer MSVC x86_64 installation
 $gstRoot = "C:\Program Files\gstreamer\1.0\msvc_x86_64"
@@ -114,7 +143,6 @@ $dls = "C:\dlstreamer_dlls"
 
 $env:PATH = "$genicamRuntime;$gstRoot\bin;$dls;" + $env:PATH
 $env:GST_PLUGIN_PATH = $dls
-# $env:GST_PLUGIN_SYSTEM_PATH_1_0 = "$gstRoot\lib\gstreamer-1.0"  # Not needed: GStreamer auto-detects system plugins when $gstRoot\bin is in PATH
 
 # Set to the GenTL producer path for your camera vendor, for example:
 #   Basler pylon:           C:\Program Files\Basler\pylon\Runtime\x64
@@ -123,8 +151,7 @@ $env:GST_PLUGIN_PATH = $dls
 $env:GENICAM_GENTL64_PATH = "<path-to-vendor-gentl-producer>"
 
 # Always clear the GStreamer plugin registry cache before inspect/launch.
-# GStreamer caches plugin scan results; a stale cache causes "No such element"
-# errors even when the DLL is valid.
+# A stale cache causes "No such element" errors even when the DLL is valid.
 Remove-Item "C:\Temp\gst-registry-clean.bin" -ErrorAction SilentlyContinue
 $env:GST_REGISTRY_1_0 = "C:\Temp\gst-registry-clean.bin"
 ```
