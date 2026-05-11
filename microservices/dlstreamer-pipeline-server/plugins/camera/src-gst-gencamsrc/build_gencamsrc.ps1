@@ -15,16 +15,104 @@
 # Usage
 #   .\build_gencamsrc.ps1
 #   .\build_gencamsrc.ps1 -GenicamRoot "D:\GenICam" -VcVersion 120
+#   .\build_gencamsrc.ps1 -FetchGenicamSdk          # download SDK automatically
 # ==============================================================================
 
 param(
-    [string]$GenicamRoot = "",
-    [string]$VcVersion   = "120",   # 120=VS2013, 141=VS2017, 142=VS2019, 143=VS2022
-    [string]$BuildType   = "Release"
+    [string]$GenicamRoot     = "",
+    [string]$VcVersion       = "120",   # 120=VS2013, 141=VS2017, 142=VS2019, 143=VS2022
+    [string]$BuildType       = "Release",
+    [switch]$FetchGenicamSdk              # download EMVA GenICam SDK v3.1 automatically
 )
 
 $ErrorActionPreference = "Stop"
 $SRC_DIR = $PSScriptRoot
+
+# ============================================================================
+# Fetch GenICam SDK (auto-triggered when bundled folder is absent and no
+# -GenicamRoot / env var is provided, or when -FetchGenicamSdk is passed)
+# ============================================================================
+$BUNDLED_GENICAM = "$SRC_DIR\plugins\genicam-core\genicam_win"
+
+$needFetch = $FetchGenicamSdk -or (
+    ($GenicamRoot -eq "") -and
+    (-Not $env:GENICAM_ROOT64) -and
+    (-Not $env:GENICAM_ROOT) -and
+    (-Not (Test-Path $BUNDLED_GENICAM))
+)
+
+if ($needFetch) {
+    # EMVA GenICam Package 2018.06 contains GenApi 3.1.0 + VC120 binaries
+    $GENICAM_DOWNLOAD_URL = "https://www.emva.org/wp-content/uploads/GenICam_Package_2018.06.zip"
+    $GENICAM_ZIP          = "$env:TEMP\GenICam_Package_2018.06.zip"
+    $GENICAM_EXTRACT_DIR  = "$env:TEMP\genicam_extract_$PID"
+
+    Write-Host ""
+    Write-Host "========== Fetching GenICam SDK =========="
+    Write-Host "URL    : $GENICAM_DOWNLOAD_URL"
+    Write-Host "Target : $BUNDLED_GENICAM"
+
+    try {
+        if (-Not (Test-Path $GENICAM_ZIP)) {
+            Write-Host "Downloading..."
+            Invoke-WebRequest -Uri $GENICAM_DOWNLOAD_URL -OutFile $GENICAM_ZIP -UseBasicParsing
+        } else {
+            Write-Host "Using cached zip: $GENICAM_ZIP"
+        }
+
+        Write-Host "Extracting..."
+        if (Test-Path $GENICAM_EXTRACT_DIR) { Remove-Item -Recurse -Force $GENICAM_EXTRACT_DIR }
+        Expand-Archive -Path $GENICAM_ZIP -DestinationPath $GENICAM_EXTRACT_DIR -Force
+
+        # Probe the extracted layout:
+        #   Case A: Dev\ and Runtime\ sit directly inside the extract dir
+        #   Case B: a single top-level subdirectory wraps them
+        $devDir     = Join-Path $GENICAM_EXTRACT_DIR "Dev"
+        $runtimeDir = Join-Path $GENICAM_EXTRACT_DIR "Runtime"
+
+        if (-Not (Test-Path $devDir)) {
+            # Look one level deeper
+            $topItems = Get-ChildItem $GENICAM_EXTRACT_DIR -Directory
+            if ($topItems.Count -eq 1) {
+                $subdirRoot = $topItems[0].FullName
+                $devDir     = Join-Path $subdirRoot "Dev"
+                $runtimeDir = Join-Path $subdirRoot "Runtime"
+            }
+        }
+
+        if (-Not (Test-Path $devDir)) {
+            Write-Host "Extracted contents:"
+            Get-ChildItem $GENICAM_EXTRACT_DIR | ForEach-Object { Write-Host "  $_" }
+            throw "Cannot locate Dev\ inside the GenICam zip.  Unexpected layout — please inspect and set -GenicamRoot manually."
+        }
+
+        # Assemble genicam_win from extracted Dev + Runtime
+        if (Test-Path $BUNDLED_GENICAM) { Remove-Item -Recurse -Force $BUNDLED_GENICAM }
+        New-Item -ItemType Directory -Path $BUNDLED_GENICAM | Out-Null
+        Copy-Item $devDir     -Destination "$BUNDLED_GENICAM\Dev"     -Recurse -Force
+        Copy-Item $runtimeDir -Destination "$BUNDLED_GENICAM\Runtime" -Recurse -Force
+
+        # Verify version header
+        $verHeader = "$BUNDLED_GENICAM\Dev\library\CPP\include\_GenICamVersion.h"
+        if (Test-Path $verHeader) {
+            $verText = Get-Content $verHeader -Raw
+            Write-Host "GenICam version info:"
+            $verText -split "`n" | Where-Object { $_ -match 'VERSION|COMPILER|REVISION' } | ForEach-Object { Write-Host "  $_" }
+        } else {
+            Write-Warning "_GenICamVersion.h not found — zip structure may differ from expected."
+        }
+
+        Write-Host "GenICam SDK extracted to: $BUNDLED_GENICAM"
+    } catch {
+        Write-Error "GenICam SDK fetch failed: $_`n`nManual download: $GENICAM_DOWNLOAD_URL`nExtract Dev\ and Runtime\ into: $BUNDLED_GENICAM"
+        exit 1
+    } finally {
+        if (Test-Path $GENICAM_EXTRACT_DIR) { Remove-Item -Recurse -Force $GENICAM_EXTRACT_DIR }
+    }
+
+    # Override GenicamRoot so the locate block below uses the freshly fetched SDK
+    $GenicamRoot = $BUNDLED_GENICAM
+}
 
 # ============================================================================
 # Locate Visual Studio
@@ -75,8 +163,12 @@ if ($GenicamRoot -ne "") {
     $GENICAM_ROOT = $env:GENICAM_ROOT64
 } elseif ($env:GENICAM_ROOT) {
     $GENICAM_ROOT = $env:GENICAM_ROOT
+} elseif (Test-Path $BUNDLED_GENICAM) {
+    # Fall back to the bundled SDK inside the repository
+    $GENICAM_ROOT = $BUNDLED_GENICAM
+    Write-Host "Using bundled GenICam SDK at: $GENICAM_ROOT"
 } else {
-    Write-Error "GenICam SDK root not specified.`nPass -GenicamRoot <path> or set the GENICAM_ROOT64 / GENICAM_ROOT environment variable."
+    Write-Error "GenICam SDK root not specified.`nOptions:`n  1. Pass -GenicamRoot <path>`n  2. Set GENICAM_ROOT64 / GENICAM_ROOT environment variable`n  3. Pass -FetchGenicamSdk to download automatically`n  4. Manually place the SDK at: $BUNDLED_GENICAM"
     exit 1
 }
 if (-Not (Test-Path $GENICAM_ROOT)) {
