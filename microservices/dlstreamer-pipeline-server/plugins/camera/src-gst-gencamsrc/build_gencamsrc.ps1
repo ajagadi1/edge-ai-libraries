@@ -64,31 +64,66 @@ if ($needFetch) {
         if (Test-Path $GENICAM_EXTRACT_DIR) { Remove-Item -Recurse -Force $GENICAM_EXTRACT_DIR }
         Expand-Archive -Path $GENICAM_ZIP -DestinationPath $GENICAM_EXTRACT_DIR -Force
 
-        # Probe the extracted layout recursively: find the Dev\ directory that
-        # contains library\CPP\include (the GenICam development headers).
-        $devDir = Get-ChildItem $GENICAM_EXTRACT_DIR -Recurse -Directory -Filter "Dev" |
-            Where-Object { Test-Path (Join-Path $_.FullName "library\CPP\include") } |
+        # The GenICam_Package_2018.06.zip is a package-of-packages.
+        # The actual Win64 VC120 SDK lives in inner zip files under
+        # "Reference Implementation\":
+        #   *Win64_x64_VS120*Development* -> Dev\
+        #   *Win64_x64_VS120*Runtime*     -> Runtime\  (not CommonRuntime)
+        $refDir = Get-ChildItem $GENICAM_EXTRACT_DIR -Recurse -Directory -Filter "Reference Implementation" |
             Select-Object -First 1 -ExpandProperty FullName
 
-        if (-Not $devDir) {
-            # Fallback: any Dev\ directory inside the zip
-            $devDir = Get-ChildItem $GENICAM_EXTRACT_DIR -Recurse -Directory -Filter "Dev" |
-                Select-Object -First 1 -ExpandProperty FullName
+        if (-Not $refDir) {
+            Write-Host "Extracted top-level contents:"
+            Get-ChildItem $GENICAM_EXTRACT_DIR -Recurse -Depth 2 | ForEach-Object { Write-Host "  $($_.FullName)" }
+            throw "Cannot locate 'Reference Implementation' folder inside the GenICam zip. Unexpected layout - please re-run with -GenicamRoot <path>."
         }
 
-        if (-Not $devDir) {
-            Write-Host "Extracted contents (top 3 levels):"
-            Get-ChildItem $GENICAM_EXTRACT_DIR -Recurse -Depth 3 | ForEach-Object { Write-Host "  $($_.FullName)" }
-            throw "Cannot locate Dev\ inside the GenICam zip. Unexpected layout - please inspect the extracted folder and re-run with -GenicamRoot <path>."
+        $devZip     = Get-ChildItem $refDir -Filter "*Win64_x64_VS120*Development*.zip"  | Select-Object -First 1
+        $runtimeZip = Get-ChildItem $refDir -Filter "*Win64_x64_VS120*Release-Runtime*.zip" | Select-Object -First 1
+
+        if (-Not $devZip) {
+            throw "Cannot find Win64_x64_VS120 Development zip in '$refDir'. Available files: $(Get-ChildItem $refDir -Filter '*.zip' | Select-Object -ExpandProperty Name)"
+        }
+        if (-Not $runtimeZip) {
+            throw "Cannot find Win64_x64_VS120 Runtime zip in '$refDir'. Available files: $(Get-ChildItem $refDir -Filter '*.zip' | Select-Object -ExpandProperty Name)"
         }
 
-        $runtimeDir = Join-Path (Split-Path $devDir -Parent) "Runtime"
+        Write-Host "Extracting Development SDK: $($devZip.Name)"
+        $devExtract = "$GENICAM_EXTRACT_DIR\_dev"
+        Expand-Archive -Path $devZip.FullName -DestinationPath $devExtract -Force
+
+        Write-Host "Extracting Runtime SDK: $($runtimeZip.Name)"
+        $runtimeExtract = "$GENICAM_EXTRACT_DIR\_runtime"
+        Expand-Archive -Path $runtimeZip.FullName -DestinationPath $runtimeExtract -Force
+
+        # Locate Dev\ and Runtime\ inside their respective extractions
+        $devDir = Get-ChildItem $devExtract -Recurse -Directory -Filter "Dev" |
+            Select-Object -First 1 -ExpandProperty FullName
+        if (-Not $devDir) { $devDir = $devExtract }  # may extract directly as Dev contents
+
+        $runtimeDir = Get-ChildItem $runtimeExtract -Recurse -Directory -Filter "Runtime" |
+            Select-Object -First 1 -ExpandProperty FullName
+        if (-Not $runtimeDir) { $runtimeDir = $runtimeExtract }
 
         # Assemble genicam_win from extracted Dev + Runtime
         if (Test-Path $BUNDLED_GENICAM) { Remove-Item -Recurse -Force $BUNDLED_GENICAM }
         New-Item -ItemType Directory -Path $BUNDLED_GENICAM | Out-Null
-        Copy-Item $devDir     -Destination "$BUNDLED_GENICAM\Dev"     -Recurse -Force
-        Copy-Item $runtimeDir -Destination "$BUNDLED_GENICAM\Runtime" -Recurse -Force
+
+        # If Dev\ was found as a named folder, copy it as-is; otherwise treat root as Dev contents
+        $destDev     = "$BUNDLED_GENICAM\Dev"
+        $destRuntime = "$BUNDLED_GENICAM\Runtime"
+        if ((Split-Path $devDir -Leaf) -eq "Dev") {
+            Copy-Item $devDir -Destination $destDev -Recurse -Force
+        } else {
+            New-Item -ItemType Directory -Path $destDev | Out-Null
+            Copy-Item "$devDir\*" -Destination $destDev -Recurse -Force
+        }
+        if ((Split-Path $runtimeDir -Leaf) -eq "Runtime") {
+            Copy-Item $runtimeDir -Destination $destRuntime -Recurse -Force
+        } else {
+            New-Item -ItemType Directory -Path $destRuntime | Out-Null
+            Copy-Item "$runtimeDir\*" -Destination $destRuntime -Recurse -Force
+        }
 
         # Verify version header
         $verHeader = "$BUNDLED_GENICAM\Dev\library\CPP\include\_GenICamVersion.h"
