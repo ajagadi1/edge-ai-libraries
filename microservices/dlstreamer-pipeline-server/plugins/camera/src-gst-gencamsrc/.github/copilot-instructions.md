@@ -37,6 +37,7 @@ Copy-Item "build\bin\Release\gstgencamsrc.dll" "C:\dlstreamer_dlls\gstgencamsrc.
 
 - GenICam SDK auto-downloaded to `plugins\genicam-core\genicam_win\` on first build (EMVA GenAPI v3.1, VC120/VS2013); folder is git-ignored
 - `-GenicamRoot` / `GENICAM_ROOT64` env var still accepted to point at a system-installed SDK instead
+- **Source path must be short** (e.g. `C:\p\gencamsrc`). The Development zip contains paths like `GenApi\SnipperTest\XMLExtractionTest_TestGenICamSupport_FloatingInt.h` that push total path length over 260 chars if the source root is deep.
 
 ## GenICam SDK Layout
 
@@ -46,6 +47,17 @@ Copy-Item "build\bin\Release\gstgencamsrc.dll" "C:\dlstreamer_dlls\gstgencamsrc.
 | Windows | `plugins/genicam-core/genicam_win/` | `Dev/library/CPP/include/` | `Dev/library/CPP/lib/Win64_x64/` |
 
 `CMakeLists.txt` sets `GENICAM_INCLUDE_DIR` and `GENICAM_LIB_DIR` per-platform automatically.
+
+### GenICam_Package_2018.06.zip structure (Windows download)
+
+The outer zip is a package-of-packages. Key layout:
+- `GenICam_Package_2018.06/GenTL/GenTL_v1_5.h` — copied to `Dev/library/CPP/include/GenTL/`
+- `GenICam_Package_2018.06/SFNC/PFNC.h` — copied to `Dev/library/CPP/include/GenTL/`
+- `GenICam_Package_2018.06/Reference Implementation/*Win64_x64_VS120*.zip` — 4 inner zips:
+  - `Development` → extracted to `Dev/` (contains `library/CPP/include/` and `library/CPP/lib/Win64_x64/`)
+  - `Runtime`, `CommonRuntime`, `FirmwareUpdateRuntime` → `bin/` copied to `Runtime/bin/`
+
+`GenTL_v1_5.h` and `PFNC.h` are **not** inside the Development inner zip — they are standalone spec files in the outer zip.
 
 ## Runtime Environment Setup — Windows (before gst-inspect / gst-launch)
 
@@ -87,6 +99,10 @@ $env:GST_REGISTRY_1_0 = "C:\Temp\gst-registry-clean.bin"
 6. **GCC 13 / Ubuntu 24 stricter headers** — `buffer.h` requires `#include <cstdint>` explicitly. GCC 11 pulled it in transitively; GCC 13 does not. Do not remove the `<cstdint>` include.
 
 7. **`GENICAM_INCLUDE_DIR` is platform-specific** — Windows SDK uses `Dev/library/CPP/include/`, Linux bundled SDK uses `include/`. The `CMakeLists.txt` `if(WIN32)` block handles this; do not hardcode one path.
+
+8. **Em dashes in `.ps1` files cause CP1252 parse errors on Windows** — Git on Linux saves files as UTF-8 but PowerShell on Windows reads them as CP1252 if there is no BOM. The UTF-8 em dash (`U+2014`, `0xE2 0x80 0x94`) becomes `0x94` in CP1252 (right double-quote), breaking string literals. Always use plain ASCII hyphens `-` in `.ps1` files, never em dashes.
+
+9. **Source path must be short for Windows SDK extraction** — The Development zip contains `GenApi\SnipperTest\XMLExtractionTest_TestGenICamSupport_FloatingInt.h`. If the source root exceeds ~80 chars, the extracted path hits the 260-char Windows MAX_PATH limit. Clone or copy the repo to a short path like `C:\p\gencamsrc` before building.
 
 ## The Balluff Fix (already applied)
 
