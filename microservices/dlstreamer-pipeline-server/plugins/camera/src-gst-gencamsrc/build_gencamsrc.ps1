@@ -114,10 +114,30 @@ if ($needFetch) {
         foreach ($z in $win64Zips) {
             Write-Host "Extracting: $($z.Name)"
             $zDir = "$GENICAM_EXTRACT_DIR\_$($z.BaseName)"
-            Expand-Archive -Path $z.FullName -DestinationPath $zDir -Force
 
             if ($z.Name -match "Development") {
-                # Locate library\ (contains CPP\include\ and CPP\lib\)
+                # Selectively extract only library/ entries — skip symbols/, Doc/, xml/
+                # which together contain thousands of files we never need.
+                Add-Type -AssemblyName System.IO.Compression.FileSystem
+                $zip = [System.IO.Compression.ZipFile]::OpenRead($z.FullName)
+                try {
+                    $libEntries = $zip.Entries | Where-Object {
+                        $_.FullName -match '(^|/)library/' -and $_.Name -ne ""
+                    }
+                    Write-Host "  Extracting $($libEntries.Count) library entries (skipping symbols/docs)..."
+                    foreach ($entry in $libEntries) {
+                        $relPath = $entry.FullName -replace '^.*?library/', 'library/'
+                        $destFile = [System.IO.Path]::Combine($zDir, $relPath)
+                        $destDir  = [System.IO.Path]::GetDirectoryName($destFile)
+                        if (-Not [System.IO.Directory]::Exists($destDir)) {
+                            [System.IO.Directory]::CreateDirectory($destDir) | Out-Null
+                        }
+                        [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destFile, $true)
+                    }
+                } finally {
+                    $zip.Dispose()
+                }
+
                 $srcLib = Get-ChildItem $zDir -Recurse -Directory -Filter "library" | Select-Object -First 1
                 if ($srcLib) {
                     Write-Host "  Copying Dev\library..."
@@ -127,7 +147,8 @@ if ($needFetch) {
                     throw "library\ not found inside $($z.Name)"
                 }
             } else {
-                # CommonRuntime / Runtime / FirmwareUpdateRuntime: copy bin\ DLLs
+                # Runtime, CommonRuntime, FirmwareUpdateRuntime — small zips, full extract then copy bin\
+                Expand-Archive -Path $z.FullName -DestinationPath $zDir -Force
                 $srcBin = Get-ChildItem $zDir -Recurse -Directory -Filter "bin" | Select-Object -First 1
                 if ($srcBin) {
                     Write-Host "  Copying Runtime\bin from $($z.BaseName)..."
