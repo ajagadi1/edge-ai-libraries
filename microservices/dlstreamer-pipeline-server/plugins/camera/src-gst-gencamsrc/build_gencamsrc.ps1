@@ -53,11 +53,21 @@ if ($needFetch) {
     Write-Host "Target : $BUNDLED_GENICAM"
 
     try {
+        # Validate any cached zip; delete and re-download if corrupt/incomplete
+        if (Test-Path $GENICAM_ZIP) {
+            try {
+                $zipStream = [System.IO.Compression.ZipFile]::OpenRead($GENICAM_ZIP)
+                $zipStream.Dispose()
+                Write-Host "Using cached zip: $GENICAM_ZIP"
+            } catch {
+                Write-Warning "Cached zip is corrupt or incomplete, re-downloading..."
+                Remove-Item $GENICAM_ZIP -Force
+            }
+        }
+
         if (-Not (Test-Path $GENICAM_ZIP)) {
             Write-Host "Downloading..."
             Invoke-WebRequest -Uri $GENICAM_DOWNLOAD_URL -OutFile $GENICAM_ZIP -UseBasicParsing
-        } else {
-            Write-Host "Using cached zip: $GENICAM_ZIP"
         }
 
         Write-Host "Extracting..."
