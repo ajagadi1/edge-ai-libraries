@@ -81,7 +81,8 @@ git pull
 Remove-Item -Recurse -Force C:\p\gencamsrc -ErrorAction SilentlyContinue
 xcopy /E /I /Q . "C:\p\gencamsrc"
 
-# 3. Clean any leftover extraction temp files from previous runs
+# 3. Clean any leftover extraction temp files from previous runs (default temp dir is C:\tmp;
+#    override with -TempDir if needed)
 Remove-Item -Recurse -Force C:\tmp\_gc_* -ErrorAction SilentlyContinue
 
 # 4. Build from the short path
