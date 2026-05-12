@@ -17,6 +17,7 @@
 #   .\build_gencamsrc.ps1
 #   .\build_gencamsrc.ps1 -GenicamRoot "D:\GenICam" -VcVersion 120
 #   .\build_gencamsrc.ps1 -FetchGenicamSdk          # download SDK automatically
+#   .\build_gencamsrc.ps1 -FetchGenicamSdk -TempDir "D:\tmp"  # custom extraction temp dir
 # ==============================================================================
 
 param(
@@ -24,7 +25,8 @@ param(
     [string]$VcVersion       = "120",   # 120=VS2013, 141=VS2017, 142=VS2019, 143=VS2022
     [string]$BuildType       = "Release",
     [switch]$FetchGenicamSdk,             # download EMVA GenICam SDK v3.1 automatically
-    [string]$BuildDir        = ""         # override build directory (use a short path if source tree is deep)
+    [string]$BuildDir        = "",        # override build directory (use a short path if source tree is deep)
+    [string]$TempDir         = "C:\tmp"   # short temp dir for SDK extraction; keep short to avoid MAX_PATH
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,7 +38,7 @@ $SRC_DIR = $PSScriptRoot
 # LongPathsEnabled registry key.
 # ============================================================================
 if ($SRC_DIR.Length -gt 100) {
-    Write-Warning "Source path is $($SRC_DIR.Length) characters long. CMake scratch and build paths`nmay exceed Windows MAX_PATH (260 chars) and cause MSB6003 errors.`nConsider cloning to a shorter path (e.g. C:\p\gencamsrc) or passing`n-BuildDir C:\tmp\gencam_build to redirect build output."
+    Write-Warning "Source path is $($SRC_DIR.Length) characters long. CMake scratch and build paths`nmay exceed Windows MAX_PATH (260 chars) and cause MSB6003 errors.`nConsider cloning to a shorter path (e.g. C:\p\gencamsrc) or passing`n-BuildDir C:\tmp\gencam_build to redirect build output.`nIf SDK extraction also fails, pass -TempDir <short-path> (default: C:\tmp)."
 }
 
 # ============================================================================
@@ -57,9 +59,9 @@ if ($needFetch) {
     $GENICAM_DOWNLOAD_URL = "https://www.emva.org/wp-content/uploads/GenICam_Package_2018.06.zip"
     $GENICAM_ZIP          = "$env:TEMP\GenICam_Package_2018.06.zip"
     # Use a short base path to avoid MAX_PATH during Expand-Archive.
-    # Ensure C:\tmp exists (it is not created by Windows by default).
-    if (-Not (Test-Path "C:\tmp")) { New-Item -ItemType Directory -Path "C:\tmp" | Out-Null }
-    $GENICAM_EXTRACT_DIR  = "C:\tmp\_gc_$PID"
+    # Ensure $TempDir exists (C:\tmp is not created by Windows by default).
+    if (-Not (Test-Path $TempDir)) { New-Item -ItemType Directory -Path $TempDir | Out-Null }
+    $GENICAM_EXTRACT_DIR  = "$TempDir\_gc_$PID"
 
     Write-Host ""
     Write-Host "========== Fetching GenICam SDK =========="
