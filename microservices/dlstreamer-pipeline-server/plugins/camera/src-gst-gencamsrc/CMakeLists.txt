@@ -130,9 +130,7 @@ if(WIN32)
         GCBase_MD_VC${GENICAM_VC_VERSION}_v3_1
         log4cpp_MD_VC${GENICAM_VC_VERSION}_v3_1
         Log_MD_VC${GENICAM_VC_VERSION}_v3_1
-#        MathParser_MD_VC${GENICAM_VC_VERSION}_v3_1
         XmlParser_MD_VC${GENICAM_VC_VERSION}_v3_1
-#        NodeMapData_MD_VC${GENICAM_VC_VERSION}_v3_1
     )
 else()
     set(GENICAM_LIBRARY_NAMES
